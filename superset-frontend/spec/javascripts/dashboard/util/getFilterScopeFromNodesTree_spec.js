@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import getFilterScopeFromNodesTree from '../../../../src/dashboard/util/getFilterScopeFromNodesTree';
+import getFilterScopeFromNodesTree from 'src/dashboard/util/getFilterScopeFromNodesTree';
 
 describe('getFilterScopeFromNodesTree', () => {
   it('should return empty scope', () => {
@@ -71,6 +71,19 @@ describe('getFilterScopeFromNodesTree', () => {
   });
 
   describe('should return scope for tabbed dashboard', () => {
+    // this is a commonly used layout for dashboard:
+    // - Tab 1
+    //   - filter_107
+    //   - chart_106
+    // - Tab 2
+    //   - filter_108
+    //   - chart_104
+    //   - Row Tab
+    //     - chart_105
+    //     - chart_103
+    //   - New Tab
+    //     - chart_101
+    //     - chart_102
     const nodes = [
       {
         label: 'All dashboard',
@@ -93,6 +106,120 @@ describe('getFilterScopeFromNodesTree', () => {
                 showCheckbox: true,
                 type: 'CHART',
                 value: 106,
+              },
+            ],
+          },
+          {
+            label: 'Tab 2',
+            type: 'TAB',
+            value: 'TAB-w5Fp904Rs',
+            children: [
+              {
+                label: 'Time Filter',
+                showCheckbox: true,
+                type: 'CHART',
+                value: 108,
+              },
+              {
+                label: 'Life Expectancy VS Rural %',
+                showCheckbox: true,
+                type: 'CHART',
+                value: 104,
+              },
+              {
+                label: 'Row Tab 1',
+                type: 'TAB',
+                value: 'TAB-E4mJaZ-uQM',
+                children: [
+                  {
+                    value: 105,
+                    label: 'Rural Breakdown',
+                    type: 'CHART',
+                    showCheckbox: true,
+                  },
+                  {
+                    value: 103,
+                    label: '% Rural',
+                    type: 'CHART',
+                    showCheckbox: true,
+                  },
+                ],
+              },
+              {
+                value: 'TAB-rLYu-Cryu',
+                label: 'New Tab',
+                type: 'TAB',
+                children: [
+                  {
+                    value: 102,
+                    label: 'Most Populated Countries',
+                    type: 'CHART',
+                    showCheckbox: true,
+                  },
+                  {
+                    value: 101,
+                    label: "World's Population",
+                    type: 'CHART',
+                    showCheckbox: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    // this is another commonly used layout for dashboard:
+    // - filter_109
+    // - Tab 1
+    //   - Row Tab 1
+    //     - filter_107
+    //     - chart_106
+    // - Tab 2
+    //   - filter_108
+    //   - chart_104
+    //   - Row Tab
+    //     - chart_105
+    //     - chart_103
+    //   - New Tab
+    //     - chart_101
+    //     - chart_102
+    const nodes2 = [
+      {
+        label: 'All dashboard',
+        type: 'ROOT',
+        value: 'ROOT_ID',
+        children: [
+          {
+            label: 'Time Filter',
+            showCheckbox: true,
+            type: 'CHART',
+            value: 109,
+          },
+          {
+            label: 'Tab 1',
+            type: 'TAB',
+            value: 'TAB-Rb5aaqKWgG',
+            children: [
+              {
+                label: 'Row Tab 1',
+                type: 'TAB',
+                value: 'TAB-row-tab1',
+                children: [
+                  {
+                    label: 'Geo Filters',
+                    showCheckbox: false,
+                    type: 'CHART',
+                    value: 107,
+                  },
+                  {
+                    label: "World's Pop Growth",
+                    showCheckbox: true,
+                    type: 'CHART',
+                    value: 106,
+                  },
+                ],
               },
             ],
           },
@@ -210,6 +337,48 @@ describe('getFilterScopeFromNodesTree', () => {
       ).toEqual({
         scope: ['TAB-Rb5aaqKWgG', 'TAB-E4mJaZ-uQM'],
         immune: [],
+      });
+    });
+
+    it('mixed row level tab and chart scope', () => {
+      const checkedChartIds = [103, 105, 102];
+      expect(
+        getFilterScopeFromNodesTree({
+          filterKey: '107_region',
+          nodes,
+          checkedChartIds,
+        }),
+      ).toEqual({
+        scope: ['TAB-E4mJaZ-uQM', 'TAB-rLYu-Cryu'],
+        immune: [101],
+      });
+    });
+
+    it('exclude sub-tab', () => {
+      const checkedChartIds = [103, 104, 105];
+      expect(
+        getFilterScopeFromNodesTree({
+          filterKey: '108___time_range',
+          nodes,
+          checkedChartIds,
+        }),
+      ).toEqual({
+        scope: ['TAB-w5Fp904Rs'],
+        immune: [102, 101],
+      });
+    });
+
+    it('exclude top-tab', () => {
+      const checkedChartIds = [106, 109];
+      expect(
+        getFilterScopeFromNodesTree({
+          filterKey: '107_region',
+          nodes: nodes2,
+          checkedChartIds,
+        }),
+      ).toEqual({
+        scope: ['ROOT_ID'],
+        immune: [105, 103, 102, 101, 108, 104],
       });
     });
   });

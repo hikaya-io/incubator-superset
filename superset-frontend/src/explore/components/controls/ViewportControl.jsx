@@ -18,9 +18,11 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Label, Popover, OverlayTrigger } from 'react-bootstrap';
+import Popover from 'src/common/components/Popover';
 import { decimal2sexagesimal } from 'geolib';
 
+import Label from 'src/components/Label';
+import FormLabel from 'src/components/FormLabel';
 import TextControl from './TextControl';
 import ControlHeader from '../ControlHeader';
 
@@ -35,7 +37,7 @@ export const DEFAULT_VIEWPORT = {
 const PARAMS = ['longitude', 'latitude', 'zoom', 'bearing', 'pitch'];
 
 const propTypes = {
-  onChange: PropTypes.func.isRequired,
+  onChange: PropTypes.func,
   value: PropTypes.shape({
     longitude: PropTypes.number,
     latitude: PropTypes.number,
@@ -58,16 +60,18 @@ export default class ViewportControl extends React.Component {
     super(props);
     this.onChange = this.onChange.bind(this);
   }
+
   onChange(ctrl, value) {
     this.props.onChange({
       ...this.props.value,
       [ctrl]: value,
     });
   }
+
   renderTextControl(ctrl) {
     return (
       <div key={ctrl}>
-        {ctrl}
+        <FormLabel>{ctrl}</FormLabel>
         <TextControl
           value={this.props.value[ctrl]}
           onChange={this.onChange.bind(this, ctrl)}
@@ -76,37 +80,37 @@ export default class ViewportControl extends React.Component {
       </div>
     );
   }
+
   renderPopover() {
     return (
-      <Popover id={`filter-popover-${this.props.name}`} title="Viewport">
+      <div id={`filter-popover-${this.props.name}`}>
         {PARAMS.map(ctrl => this.renderTextControl(ctrl))}
-      </Popover>
+      </div>
     );
   }
+
   renderLabel() {
     if (this.props.value.longitude && this.props.value.latitude) {
-      return (
-        decimal2sexagesimal(this.props.value.longitude) +
-        ' | ' +
-        decimal2sexagesimal(this.props.value.latitude)
-      );
+      return `${decimal2sexagesimal(
+        this.props.value.longitude,
+      )} | ${decimal2sexagesimal(this.props.value.latitude)}`;
     }
     return 'N/A';
   }
+
   render() {
     return (
       <div>
         <ControlHeader {...this.props} />
-        <OverlayTrigger
+        <Popover
           container={document.body}
           trigger="click"
-          rootClose
-          ref="trigger"
           placement="right"
-          overlay={this.renderPopover()}
+          content={this.renderPopover()}
+          title="Viewport"
         >
-          <Label style={{ cursor: 'pointer' }}>{this.renderLabel()}</Label>
-        </OverlayTrigger>
+          <Label className="pointer">{this.renderLabel()}</Label>
+        </Popover>
       </div>
     );
   }

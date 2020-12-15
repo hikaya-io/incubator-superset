@@ -19,17 +19,20 @@ import textwrap
 import unittest
 
 import pandas
+import pytest
 from sqlalchemy.engine.url import make_url
 
 import tests.test_app
-from superset import app
+from superset import app, db as metadata_db
 from superset.models.core import Database
+from superset.models.slice import Slice
 from superset.utils.core import get_example_database, QueryStatus
 
 from .base_tests import SupersetTestCase
+from .fixtures.energy_dashboard import load_energy_table_with_slice
 
 
-class DatabaseModelTestCase(SupersetTestCase):
+class TestDatabaseModel(SupersetTestCase):
     @unittest.skipUnless(
         SupersetTestCase.is_module_installed("requests"), "requests not installed"
     )
@@ -106,28 +109,66 @@ class DatabaseModelTestCase(SupersetTestCase):
         user_name = make_url(model.get_sqla_engine(user_name=example_user).url).username
         self.assertNotEqual(example_user, user_name)
 
+    @pytest.mark.usefixtures("load_energy_table_with_slice")
     def test_select_star(self):
         db = get_example_database()
         table_name = "energy_usage"
         sql = db.select_star(table_name, show_cols=False, latest_partition=False)
-        expected = textwrap.dedent(
-            f"""\
+        quote = db.inspector.engine.dialect.identifier_preparer.quote_identifier
+        expected = (
+            textwrap.dedent(
+                f"""\
+        SELECT *
+        FROM {quote(table_name)}
+        LIMIT 100"""
+            )
+            if db.backend in {"presto", "hive"}
+            else textwrap.dedent(
+                f"""\
         SELECT *
         FROM {table_name}
         LIMIT 100"""
+            )
         )
-        assert sql.startswith(expected)
-
+        assert expected in sql
         sql = db.select_star(table_name, show_cols=True, latest_partition=False)
-        expected = textwrap.dedent(
-            f"""\
-        SELECT source,
-               target,
-               value
-        FROM energy_usage
-        LIMIT 100"""
-        )
-        assert sql.startswith(expected)
+        # TODO(bkyryliuk): unify sql generation
+        if db.backend == "presto":
+            assert (
+                textwrap.dedent(
+                    """\
+                SELECT "source" AS "source",
+                       "target" AS "target",
+                       "value" AS "value"
+                FROM "energy_usage"
+                LIMIT 100"""
+                )
+                == sql
+            )
+        elif db.backend == "hive":
+            assert (
+                textwrap.dedent(
+                    """\
+                SELECT `source`,
+                       `target`,
+                       `value`
+                FROM `energy_usage`
+                LIMIT 100"""
+                )
+                == sql
+            )
+        else:
+            assert (
+                textwrap.dedent(
+                    """\
+                SELECT source,
+                       target,
+                       value
+                FROM energy_usage
+                LIMIT 100"""
+                )
+                in sql
+            )
 
     def test_select_star_fully_qualified_names(self):
         db = get_example_database()
@@ -172,7 +213,7 @@ class DatabaseModelTestCase(SupersetTestCase):
             self.assertEqual(df.iat[0, 0], ";")
 
 
-class SqlaTableModelTestCase(SupersetTestCase):
+class TestSqlaTableModel(SupersetTestCase):
     def test_get_timestamp_expression(self):
         tbl = self.get_table_by_name("birth_names")
         ds_col = tbl.get_column("ds")
@@ -230,7 +271,7 @@ class SqlaTableModelTestCase(SupersetTestCase):
         spec.allows_joins = inner_join
         arbitrary_gby = "state || gender || '_test'"
         arbitrary_metric = dict(
-            label="arbitrary", expressionType="SQL", sqlExpression="COUNT(1)"
+            label="arbitrary", expressionType="SQL", sqlExpression="SUM(sum_boys)"
         )
         query_obj = dict(
             groupby=[arbitrary_gby, "name"],
@@ -257,19 +298,40 @@ class SqlaTableModelTestCase(SupersetTestCase):
         return qr.df
 
     def test_query_with_expr_groupby_timeseries(self):
+        if get_example_database().backend == "presto":
+            # TODO(bkyryliuk): make it work for presto.
+            return
+
         def cannonicalize_df(df):
             ret = df.sort_values(by=list(df.columns.values), inplace=False)
             ret.reset_index(inplace=True, drop=True)
             return ret
 
         df1 = self.query_with_expr_helper(is_timeseries=True, inner_join=True)
+        name_list1 = cannonicalize_df(df1).name.values.tolist()
         df2 = self.query_with_expr_helper(is_timeseries=True, inner_join=False)
+        name_list2 = cannonicalize_df(df1).name.values.tolist()
         self.assertFalse(df2.empty)
-        # df1 can be empty if the db does not support join
-        if not df1.empty:
-            pandas.testing.assert_frame_equal(
-                cannonicalize_df(df1), cannonicalize_df(df2)
-            )
+
+        expected_namelist = [
+            "Anthony",
+            "Brian",
+            "Christopher",
+            "Daniel",
+            "David",
+            "Eric",
+            "James",
+            "Jeffrey",
+            "John",
+            "Joseph",
+            "Kenneth",
+            "Kevin",
+            "Mark",
+            "Michael",
+            "Paul",
+        ]
+        assert name_list2 == expected_namelist
+        assert name_list1 == expected_namelist
 
     def test_query_with_expr_groupby(self):
         self.query_with_expr_helper(is_timeseries=False)
@@ -318,3 +380,16 @@ class SqlaTableModelTestCase(SupersetTestCase):
             tbl.get_query_str(query_obj)
 
         self.assertTrue("Metric 'invalid' does not exist", context.exception)
+
+    def test_data_for_slices(self):
+        tbl = self.get_table_by_name("birth_names")
+        slc = (
+            metadata_db.session.query(Slice)
+            .filter_by(datasource_id=tbl.id, datasource_type=tbl.type)
+            .first()
+        )
+
+        data_for_slices = tbl.data_for_slices([slc])
+        self.assertEqual(len(data_for_slices["columns"]), 0)
+        self.assertEqual(len(data_for_slices["metrics"]), 1)
+        self.assertEqual(len(data_for_slices["verbose_map"].keys()), 2)

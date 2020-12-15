@@ -20,15 +20,19 @@ import React from 'react';
 import configureStore from 'redux-mock-store';
 import thunk from 'redux-thunk';
 import { bindActionCreators } from 'redux';
+import { Provider } from 'react-redux';
 
-import { shallow, mount } from 'enzyme';
-import { Modal, Button, Radio } from 'react-bootstrap';
+import { shallow } from 'enzyme';
+import { styledMount as mount } from 'spec/helpers/theming';
+import { FormControl, Radio } from 'react-bootstrap';
+import Button from 'src/components/Button';
 import sinon from 'sinon';
 import fetchMock from 'fetch-mock';
 
-import * as exploreUtils from '../../../../src/explore/exploreUtils';
-import * as saveModalActions from '../../../../src/explore/actions/saveModalActions';
-import SaveModal from '../../../../src/explore/components/SaveModal';
+import Modal from 'src/common/components/Modal';
+import * as exploreUtils from 'src/explore/exploreUtils';
+import * as saveModalActions from 'src/explore/actions/saveModalActions';
+import SaveModal from 'src/explore/components/SaveModal';
 
 describe('SaveModal', () => {
   const middlewares = [thunk];
@@ -65,27 +69,28 @@ describe('SaveModal', () => {
     target: {
       value: 'mock event target',
     },
-    value: 'mock value',
+    value: 10,
   };
 
   const getWrapper = () =>
-    shallow(<SaveModal {...defaultProps} />, {
-      context: { store },
-    }).dive();
+    shallow(<SaveModal {...defaultProps} store={store} />)
+      .dive()
+      .dive();
 
-  it('renders a Modal with 7 inputs and 2 buttons', () => {
+  it('renders a Modal with the right set of components', () => {
     const wrapper = getWrapper();
-    expect(wrapper.find(Modal)).toHaveLength(1);
-    expect(wrapper.find('input')).toHaveLength(2);
-    expect(wrapper.find(Button)).toHaveLength(2);
-    expect(wrapper.find(Radio)).toHaveLength(5);
+    expect(wrapper.find(Modal)).toExist();
+    expect(wrapper.find(FormControl)).toExist();
+    expect(wrapper.find(Radio)).toHaveLength(2);
+
+    const footerWrapper = shallow(wrapper.find('Modal').props().footer);
+    expect(footerWrapper.find(Button)).toHaveLength(3);
   });
 
-  it('does not show overwrite option for new slice', () => {
-    const wrapperNewSlice = getWrapper();
-    wrapperNewSlice.setProps({ slice: null });
-    expect(wrapperNewSlice.find('#overwrite-radio')).toHaveLength(0);
-    expect(wrapperNewSlice.find('#saveas-radio')).toHaveLength(1);
+  it('overwrite radio button is disabled for new slice', () => {
+    const wrapper = getWrapper();
+    wrapper.setProps({ slice: null });
+    expect(wrapper.find('#overwrite-radio').prop('disabled')).toBe(true);
   });
 
   it('disable overwrite option for non-owner', () => {
@@ -113,41 +118,35 @@ describe('SaveModal', () => {
   });
 
   it('componentDidMount', () => {
-    sinon.spy(SaveModal.prototype, 'componentDidMount');
     sinon.spy(defaultProps.actions, 'fetchDashboards');
-    mount(<SaveModal {...defaultProps} />, {
-      context: { store },
-    });
-    expect(SaveModal.prototype.componentDidMount.calledOnce).toBe(true);
+    mount(
+      <Provider store={store}>
+        <SaveModal {...defaultProps} />
+      </Provider>,
+    );
     expect(defaultProps.actions.fetchDashboards.calledOnce).toBe(true);
 
-    SaveModal.prototype.componentDidMount.restore();
     defaultProps.actions.fetchDashboards.restore();
   });
 
   it('onChange', () => {
     const wrapper = getWrapper();
 
-    wrapper.instance().onChange('newSliceName', mockEvent);
+    wrapper.instance().onSliceNameChange(mockEvent);
     expect(wrapper.state().newSliceName).toBe(mockEvent.target.value);
 
-    wrapper.instance().onChange('saveToDashboardId', mockEvent);
+    wrapper.instance().onDashboardSelectChange(mockEvent);
     expect(wrapper.state().saveToDashboardId).toBe(mockEvent.value);
-
-    wrapper.instance().onChange('newDashboardName', mockEvent);
-    expect(wrapper.state().newDashboardName).toBe(mockEvent.target.value);
   });
 
   describe('saveOrOverwrite', () => {
     beforeEach(() => {
-      sinon
-        .stub(exploreUtils, 'getExploreUrlAndPayload')
-        .callsFake(() => ({ url: 'mockURL', payload: defaultProps.form_data }));
+      sinon.stub(exploreUtils, 'getExploreUrl').callsFake(() => 'mockURL');
 
       sinon.stub(defaultProps.actions, 'saveSlice').callsFake(() =>
         Promise.resolve({
           data: {
-            dashboard: '/mock_dashboard/',
+            dashboard_url: 'http://localhost/mock_dashboard/',
             slice: { slice_url: '/mock_slice/' },
           },
         }),
@@ -155,14 +154,14 @@ describe('SaveModal', () => {
     });
 
     afterEach(() => {
-      exploreUtils.getExploreUrlAndPayload.restore();
+      exploreUtils.getExploreUrl.restore();
       defaultProps.actions.saveSlice.restore();
     });
 
     it('should save slice', () => {
       const wrapper = getWrapper();
       wrapper.instance().saveOrOverwrite(true);
-      const args = defaultProps.actions.saveSlice.getCall(0).args;
+      const { args } = defaultProps.actions.saveSlice.getCall(0);
       expect(args[0]).toEqual(defaultProps.form_data);
     });
 
@@ -170,13 +169,9 @@ describe('SaveModal', () => {
       const wrapper = getWrapper();
       const saveToDashboardId = 100;
 
-      wrapper.setState({ addToDash: 'existing' });
-      wrapper.instance().saveOrOverwrite(true);
-      expect(wrapper.state().alert).toBe('Please select a dashboard');
-
       wrapper.setState({ saveToDashboardId });
       wrapper.instance().saveOrOverwrite(true);
-      const args = defaultProps.actions.saveSlice.getCall(0).args;
+      const { args } = defaultProps.actions.saveSlice.getCall(0);
       expect(args[1].save_to_dashboard_id).toBe(saveToDashboardId);
     });
 
@@ -184,58 +179,71 @@ describe('SaveModal', () => {
       const wrapper = getWrapper();
       const newDashboardName = 'new dashboard name';
 
-      wrapper.setState({ addToDash: 'new' });
-      wrapper.instance().saveOrOverwrite(true);
-      expect(wrapper.state().alert).toBe('Please enter a dashboard name');
-
       wrapper.setState({ newDashboardName });
       wrapper.instance().saveOrOverwrite(true);
-      const args = defaultProps.actions.saveSlice.getCall(0).args;
+      const { args } = defaultProps.actions.saveSlice.getCall(0);
       expect(args[1].new_dashboard_name).toBe(newDashboardName);
     });
 
     describe('should always reload or redirect', () => {
       let wrapper;
+      let windowLocation;
+
       beforeEach(() => {
         wrapper = getWrapper();
+        windowLocation = window.location;
+        // To bypass "TypeError: Cannot redefine property: assign"
+        Object.defineProperty(window, 'location', {
+          value: { ...windowLocation, assign: () => {} },
+        });
         sinon.stub(window.location, 'assign');
       });
       afterEach(() => {
         window.location.assign.restore();
+        Object.defineProperty(window, 'location', windowLocation);
       });
 
-      it('Save & go to dashboard', done => {
-        wrapper.instance().saveOrOverwrite(true);
-        defaultProps.actions.saveSlice().then(() => {
-          expect(window.location.assign.callCount).toEqual(1);
-          expect(window.location.assign.getCall(0).args[0]).toEqual(
-            'http://localhost/mock_dashboard/',
-          );
-          done();
+      it('Save & go to dashboard', () => {
+        return new Promise(done => {
+          wrapper.instance().saveOrOverwrite(true);
+          defaultProps.actions.saveSlice().then(() => {
+            expect(window.location.assign.callCount).toEqual(1);
+            expect(window.location.assign.getCall(0).args[0]).toEqual(
+              'http://localhost/mock_dashboard/',
+            );
+            done();
+          });
         });
       });
 
-      it('saveas new slice', done => {
-        wrapper.setState({ action: 'saveas', newSliceName: 'new slice name' });
-        wrapper.instance().saveOrOverwrite(false);
-        defaultProps.actions.saveSlice().then(() => {
-          expect(window.location.assign.callCount).toEqual(1);
-          expect(window.location.assign.getCall(0).args[0]).toEqual(
-            '/mock_slice/',
-          );
-          done();
+      it('saveas new slice', () => {
+        return new Promise(done => {
+          wrapper.setState({
+            action: 'saveas',
+            newSliceName: 'new slice name',
+          });
+          wrapper.instance().saveOrOverwrite(false);
+          defaultProps.actions.saveSlice().then(() => {
+            expect(window.location.assign.callCount).toEqual(1);
+            expect(window.location.assign.getCall(0).args[0]).toEqual(
+              '/mock_slice/',
+            );
+            done();
+          });
         });
       });
 
-      it('overwrite original slice', done => {
-        wrapper.setState({ action: 'overwrite' });
-        wrapper.instance().saveOrOverwrite(false);
-        defaultProps.actions.saveSlice().then(() => {
-          expect(window.location.assign.callCount).toEqual(1);
-          expect(window.location.assign.getCall(0).args[0]).toEqual(
-            '/mock_slice/',
-          );
-          done();
+      it('overwrite original slice', () => {
+        return new Promise(done => {
+          wrapper.setState({ action: 'overwrite' });
+          wrapper.instance().saveOrOverwrite(false);
+          defaultProps.actions.saveSlice().then(() => {
+            expect(window.location.assign.callCount).toEqual(1);
+            expect(window.location.assign.getCall(0).args[0]).toEqual(
+              '/mock_slice/',
+            );
+            done();
+          });
         });
       });
     });

@@ -17,11 +17,10 @@
  * under the License.
  */
 import React from 'react';
-import Select from 'react-select';
 import { shallow } from 'enzyme';
 import fetchMock from 'fetch-mock';
-
-import AsyncSelect from '../../../src/components/AsyncSelect';
+import Select from 'src/components/Select';
+import AsyncSelect from 'src/components/AsyncSelect';
 
 describe('AsyncSelect', () => {
   afterAll(fetchMock.reset);
@@ -49,7 +48,7 @@ describe('AsyncSelect', () => {
 
   it('has one select', () => {
     const wrapper = shallow(<AsyncSelect {...mockedProps} />);
-    expect(wrapper.find(Select)).toHaveLength(1);
+    expect(wrapper.find(Select)).toExist();
   });
 
   it('calls onChange on select change', () => {
@@ -63,57 +62,65 @@ describe('AsyncSelect', () => {
   });
 
   describe('auto select', () => {
-    it('should not call onChange if autoSelect=false', done => {
-      expect.assertions(2);
+    it('should not call onChange if autoSelect=false', () => {
+      return new Promise(done => {
+        expect.assertions(2);
 
-      const onChangeSpy = jest.fn();
-      shallow(<AsyncSelect {...mockedProps} onChange={onChangeSpy} />);
+        const onChangeSpy = jest.fn();
+        shallow(<AsyncSelect {...mockedProps} onChange={onChangeSpy} />);
 
-      setTimeout(() => {
-        expect(fetchMock.calls(dataGlob)).toHaveLength(1);
-        expect(onChangeSpy.mock.calls).toHaveLength(0);
-        done();
+        setTimeout(() => {
+          expect(fetchMock.calls(dataGlob)).toHaveLength(1);
+          expect(onChangeSpy.mock.calls).toHaveLength(0);
+          done();
+        });
       });
     });
 
-    it('should auto select the first option if autoSelect=true', done => {
-      expect.assertions(3);
+    it('should auto select the first option if autoSelect=true', () => {
+      return new Promise(done => {
+        expect.assertions(3);
 
-      const onChangeSpy = jest.fn();
-      const wrapper = shallow(
-        <AsyncSelect {...mockedProps} onChange={onChangeSpy} autoSelect />,
-      );
+        const onChangeSpy = jest.fn();
+        const wrapper = shallow(
+          <AsyncSelect {...mockedProps} onChange={onChangeSpy} autoSelect />,
+        );
 
-      setTimeout(() => {
-        expect(fetchMock.calls(dataGlob)).toHaveLength(1);
-        expect(onChangeSpy.mock.calls).toHaveLength(1);
-        expect(onChangeSpy).toBeCalledWith(wrapper.instance().state.options[0]);
-        done();
+        setTimeout(() => {
+          expect(fetchMock.calls(dataGlob)).toHaveLength(1);
+          expect(onChangeSpy.mock.calls).toHaveLength(1);
+          expect(onChangeSpy).toBeCalledWith(
+            wrapper.instance().state.options[0],
+          );
+          done();
+        });
       });
     });
 
-    it('should not auto select when value prop is set and autoSelect=true', done => {
-      expect.assertions(3);
+    it('should not auto select when value prop is set and autoSelect=true', () => {
+      return new Promise(done => {
+        expect.assertions(3);
 
-      const onChangeSpy = jest.fn();
-      const wrapper = shallow(
-        <AsyncSelect
-          {...mockedProps}
-          value={2}
-          onChange={onChangeSpy}
-          autoSelect
-        />,
-      );
+        const onChangeSpy = jest.fn();
+        const wrapper = shallow(
+          <AsyncSelect
+            {...mockedProps}
+            value={2}
+            onChange={onChangeSpy}
+            autoSelect
+          />,
+        );
 
-      setTimeout(() => {
-        expect(fetchMock.calls(dataGlob)).toHaveLength(1);
-        expect(onChangeSpy.mock.calls).toHaveLength(0);
-        expect(wrapper.find(Select)).toHaveLength(1);
-        done();
+        setTimeout(() => {
+          expect(fetchMock.calls(dataGlob)).toHaveLength(1);
+          expect(onChangeSpy.mock.calls).toHaveLength(0);
+          expect(wrapper.find(Select)).toExist();
+          done();
+        });
       });
     });
 
-    it('should call onAsyncError if there is an error fetching options', done => {
+    it('should call onAsyncError if there is an error fetching options', () => {
       expect.assertions(3);
 
       const errorEndpoint = 'async/error/';
@@ -121,7 +128,7 @@ describe('AsyncSelect', () => {
       fetchMock.get(errorGlob, { throws: 'error' });
 
       const onAsyncError = jest.fn();
-      shallow(
+      const wrapper = shallow(
         <AsyncSelect
           {...mockedProps}
           dataEndpoint={errorEndpoint}
@@ -129,12 +136,18 @@ describe('AsyncSelect', () => {
         />,
       );
 
-      setTimeout(() => {
-        expect(fetchMock.calls(errorGlob)).toHaveLength(1);
-        expect(onAsyncError.mock.calls).toHaveLength(1);
-        expect(onAsyncError).toBeCalledWith('error');
-        done();
-      });
+      return wrapper
+        .instance()
+        .fetchOptions()
+        .then(() => {
+          // Fails then retries thrice whenever fetching options, which happens twice:
+          // once on component mount and once when calling `fetchOptions` again
+          expect(fetchMock.calls(errorGlob)).toHaveLength(8);
+          expect(onAsyncError.mock.calls).toHaveLength(2);
+          expect(onAsyncError).toBeCalledWith('error');
+
+          return Promise.resolve();
+        });
     });
   });
 });

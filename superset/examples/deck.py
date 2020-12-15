@@ -167,7 +167,7 @@ POSITION_JSON = """\
 }"""
 
 
-def load_deck_dash():
+def load_deck_dash() -> None:
     print("Loading deck.gl dashboard")
     slices = []
     tbl = db.session.query(TBL).filter_by(table_name="long_lat").first()
@@ -185,6 +185,7 @@ def load_deck_dash():
         "max_radius": 250,
         "row_limit": 5000,
         "time_range": " : ",
+        "time_range_endpoints": ["inclusive", "exclusive"],
         "size": "count",
         "time_grain_sqla": None,
         "viewport": {
@@ -342,7 +343,6 @@ def load_deck_dash():
                 "verbose_name": None,
             },
             "expressionType": "SIMPLE",
-            "fromFormData": True,
             "hasCustomLabel": True,
             "label": "Population",
             "optionName": "metric_t2v4qbfiz1_w6qgpx4h2p",
@@ -380,7 +380,6 @@ def load_deck_dash():
                 "aggregate": None,
                 "column": None,
                 "expressionType": "SQL",
-                "fromFormData": None,
                 "hasCustomLabel": None,
                 "label": "Density",
                 "optionName": "metric_c5rvwrzoo86_293h6yrv2ic",

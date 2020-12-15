@@ -20,13 +20,13 @@ import React from 'react';
 import { shallow } from 'enzyme';
 import sinon from 'sinon';
 
-import DashboardComponent from '../../../../src/dashboard/containers/DashboardComponent';
-import DashboardGrid from '../../../../src/dashboard/components/DashboardGrid';
-import DragDroppable from '../../../../src/dashboard/components/dnd/DragDroppable';
-import newComponentFactory from '../../../../src/dashboard/util/newComponentFactory';
+import DashboardComponent from 'src/dashboard/containers/DashboardComponent';
+import DashboardGrid from 'src/dashboard/components/DashboardGrid';
+import DragDroppable from 'src/dashboard/components/dnd/DragDroppable';
+import newComponentFactory from 'src/dashboard/util/newComponentFactory';
 
-import { DASHBOARD_GRID_TYPE } from '../../../../src/dashboard/util/componentTypes';
-import { GRID_COLUMN_COUNT } from '../../../../src/dashboard/util/constants';
+import { DASHBOARD_GRID_TYPE } from 'src/dashboard/util/componentTypes';
+import { GRID_COLUMN_COUNT } from 'src/dashboard/util/constants';
 
 describe('DashboardGrid', () => {
   const props = {
@@ -48,7 +48,7 @@ describe('DashboardGrid', () => {
 
   it('should render a div with class "dashboard-grid"', () => {
     const wrapper = setup();
-    expect(wrapper.find('.dashboard-grid')).toHaveLength(1);
+    expect(wrapper.find('.dashboard-grid')).toExist();
   });
 
   it('should render one DashboardComponent for each gridComponent child', () => {
@@ -67,7 +67,7 @@ describe('DashboardGrid', () => {
 
   it('should render grid column guides when resizing', () => {
     const wrapper = setup({ editMode: true });
-    expect(wrapper.find('.grid-column-guide')).toHaveLength(0);
+    expect(wrapper.find('.grid-column-guide')).not.toExist();
 
     wrapper.setState({ isResizing: true });
 
@@ -76,9 +76,9 @@ describe('DashboardGrid', () => {
 
   it('should render a grid row guide when resizing', () => {
     const wrapper = setup();
-    expect(wrapper.find('.grid-row-guide')).toHaveLength(0);
+    expect(wrapper.find('.grid-row-guide')).not.toExist();
     wrapper.setState({ isResizing: true, rowGuideTop: 10 });
-    expect(wrapper.find('.grid-row-guide')).toHaveLength(1);
+    expect(wrapper.find('.grid-row-guide')).toExist();
   });
 
   it('should call resizeComponent when a child DashboardComponent calls resizeStop', () => {

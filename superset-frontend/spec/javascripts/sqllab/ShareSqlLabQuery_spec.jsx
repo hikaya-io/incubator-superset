@@ -19,14 +19,14 @@
 import React from 'react';
 import configureStore from 'redux-mock-store';
 import thunk from 'redux-thunk';
-import { OverlayTrigger } from 'react-bootstrap';
+import Popover from 'src/common/components/Popover';
 import fetchMock from 'fetch-mock';
 import * as featureFlags from 'src/featureFlags';
 import { shallow } from 'enzyme';
 
-import * as utils from '../../../src/utils/common';
-import Button from '../../../src/components/Button';
-import ShareSqlLabQuery from '../../../src/SqlLab/components/ShareSqlLabQuery';
+import * as utils from 'src/utils/common';
+import Button from 'src/components/Button';
+import ShareSqlLabQuery from 'src/SqlLab/components/ShareSqlLabQuery';
 
 const mockStore = configureStore([thunk]);
 const store = mockStore();
@@ -66,10 +66,7 @@ describe('ShareSqlLabQuery via /kv/store', () => {
 
   function setup(overrideProps) {
     const wrapper = shallow(
-      <ShareSqlLabQuery {...defaultProps} {...overrideProps} />,
-      {
-        context: { store },
-      },
+      <ShareSqlLabQuery store={store} {...defaultProps} {...overrideProps} />,
     ).dive(); // wrapped in withToasts HOC
 
     return wrapper;
@@ -88,7 +85,7 @@ describe('ShareSqlLabQuery via /kv/store', () => {
 
     it('renders an OverlayTrigger with Button', () => {
       const wrapper = setup();
-      const trigger = wrapper.find(OverlayTrigger);
+      const trigger = wrapper.find(Popover);
       const button = trigger.find(Button);
 
       expect(trigger).toHaveLength(1);
@@ -132,7 +129,8 @@ describe('ShareSqlLabQuery via /kv/store', () => {
         .instance()
         .getCopyUrl()
         .then(() => {
-          expect(fetchMock.calls(storeQueryUrl)).toHaveLength(1);
+          // Fails then retries thrice
+          expect(fetchMock.calls(storeQueryUrl)).toHaveLength(4);
           expect(addDangerToastSpy.mock.calls).toHaveLength(1);
           expect(addDangerToastSpy.mock.calls[0][0]).toBe(error);
 
@@ -153,7 +151,7 @@ describe('ShareSqlLabQuery via /kv/store', () => {
 
     it('renders an OverlayTrigger with Button', () => {
       const wrapper = setup();
-      const trigger = wrapper.find(OverlayTrigger);
+      const trigger = wrapper.find(Popover);
       const button = trigger.find(Button);
 
       expect(trigger).toHaveLength(1);

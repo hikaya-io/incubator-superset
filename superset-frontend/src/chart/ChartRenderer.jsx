@@ -16,12 +16,10 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import dompurify from 'dompurify';
 import { snakeCase } from 'lodash';
 import PropTypes from 'prop-types';
 import React from 'react';
-import { SuperChart } from '@superset-ui/chart';
-import { Tooltip } from 'react-bootstrap';
+import { SuperChart, logging } from '@superset-ui/core';
 import { Logger, LOG_ACTIONS_RENDER_CHART } from '../logger/LogUtils';
 
 const propTypes = {
@@ -62,11 +60,8 @@ const defaultProps = {
 class ChartRenderer extends React.Component {
   constructor(props) {
     super(props);
-    this.state = {};
-
     this.hasQueryResponseChange = false;
 
-    this.setTooltip = this.setTooltip.bind(this);
     this.handleAddFilter = this.handleAddFilter.bind(this);
     this.handleRenderSuccess = this.handleRenderSuccess.bind(this);
     this.handleRenderFailure = this.handleRenderFailure.bind(this);
@@ -76,13 +71,12 @@ class ChartRenderer extends React.Component {
       onAddFilter: this.handleAddFilter,
       onError: this.handleRenderFailure,
       setControlValue: this.handleSetControlValue,
-      setTooltip: this.setTooltip,
       onFilterMenuOpen: this.props.onFilterMenuOpen,
       onFilterMenuClose: this.props.onFilterMenuClose,
     };
   }
 
-  shouldComponentUpdate(nextProps, nextState) {
+  shouldComponentUpdate(nextProps) {
     const resultsReady =
       nextProps.queryResponse &&
       ['success', 'rendered'].indexOf(nextProps.chartStatus) > -1 &&
@@ -92,24 +86,17 @@ class ChartRenderer extends React.Component {
     if (resultsReady) {
       this.hasQueryResponseChange =
         nextProps.queryResponse !== this.props.queryResponse;
-
-      if (
+      return (
         this.hasQueryResponseChange ||
         nextProps.annotationData !== this.props.annotationData ||
         nextProps.height !== this.props.height ||
         nextProps.width !== this.props.width ||
-        nextState.tooltip !== this.state.tooltip ||
         nextProps.triggerRender ||
-        nextProps.formData.color_scheme !== this.props.formData.color_scheme
-      ) {
-        return true;
-      }
+        nextProps.formData.color_scheme !== this.props.formData.color_scheme ||
+        nextProps.cacheBusterProp !== this.props.cacheBusterProp
+      );
     }
     return false;
-  }
-
-  setTooltip(tooltip) {
-    this.setState({ tooltip });
   }
 
   handleAddFilter(col, vals, merge = true, refresh = true) {
@@ -137,7 +124,7 @@ class ChartRenderer extends React.Component {
 
   handleRenderFailure(error, info) {
     const { actions, chartId } = this.props;
-    console.warn(error); // eslint-disable-line
+    logging.warn(error);
     actions.chartRenderingFailed(
       error.toString(),
       chartId,
@@ -162,33 +149,6 @@ class ChartRenderer extends React.Component {
     if (setControlValue) {
       setControlValue(...args);
     }
-  }
-
-  renderTooltip() {
-    const { tooltip } = this.state;
-    if (tooltip && tooltip.content) {
-      return (
-        <Tooltip
-          className="chart-tooltip"
-          id="chart-tooltip"
-          placement="right"
-          positionTop={tooltip.y + 30}
-          positionLeft={tooltip.x + 30}
-          arrowOffsetTop={10}
-        >
-          {typeof tooltip.content === 'string' ? (
-            <div // eslint-disable-next-line react/no-danger
-              dangerouslySetInnerHTML={{
-                __html: dompurify.sanitize(tooltip.content),
-              }}
-            />
-          ) : (
-            tooltip.content
-          )}
-        </Tooltip>
-      );
-    }
-    return null;
   }
 
   render() {
@@ -222,26 +182,46 @@ class ChartRenderer extends React.Component {
       queryResponse,
     } = this.props;
 
+    // It's bad practice to use unprefixed `vizType` as classnames for chart
+    // container. It may cause css conflicts as in the case of legacy table chart.
+    // When migrating charts, we should gradually add a `superset-chart-` prefix
+    // to each one of them.
+    const snakeCaseVizType = snakeCase(vizType);
+    const chartClassName =
+      vizType === 'table'
+        ? `superset-chart-${snakeCaseVizType}`
+        : snakeCaseVizType;
+
+    const webpackHash =
+      process.env.WEBPACK_MODE === 'development'
+        ? `-${
+            // eslint-disable-next-line camelcase
+            typeof __webpack_require__ !== 'undefined' &&
+            // eslint-disable-next-line camelcase, no-undef
+            typeof __webpack_require__.h === 'function' &&
+            // eslint-disable-next-line no-undef
+            __webpack_require__.h()
+          }`
+        : '';
+
     return (
-      <>
-        {this.renderTooltip()}
-        <SuperChart
-          disableErrorBoundary
-          id={`chart-id-${chartId}`}
-          className={`${snakeCase(vizType)}`}
-          chartType={vizType}
-          width={width}
-          height={height}
-          annotationData={annotationData}
-          datasource={datasource}
-          initialValues={initialValues}
-          formData={formData}
-          hooks={this.hooks}
-          queryData={queryResponse}
-          onRenderSuccess={this.handleRenderSuccess}
-          onRenderFailure={this.handleRenderFailure}
-        />
-      </>
+      <SuperChart
+        disableErrorBoundary
+        key={`${chartId}${webpackHash}`}
+        id={`chart-id-${chartId}`}
+        className={chartClassName}
+        chartType={vizType}
+        width={width}
+        height={height}
+        annotationData={annotationData}
+        datasource={datasource}
+        initialValues={initialValues}
+        formData={formData}
+        hooks={this.hooks}
+        queryData={queryResponse}
+        onRenderSuccess={this.handleRenderSuccess}
+        onRenderFailure={this.handleRenderFailure}
+      />
     );
   }
 }

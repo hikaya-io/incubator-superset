@@ -18,21 +18,15 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
-import AceEditor from 'react-ace';
-import ace from 'brace';
-import 'brace/mode/sql';
-import 'brace/theme/github';
-import 'brace/ext/language_tools';
 import { FormGroup } from 'react-bootstrap';
-import VirtualizedSelect from 'react-virtualized-select';
-import { t } from '@superset-ui/translation';
+import Select from 'src/components/Select';
+import { t } from '@superset-ui/core';
+import { SQLEditor } from 'src/components/AsyncAceEditor';
+import sqlKeywords from 'src/SqlLab/utils/sqlKeywords';
 
-import sqlKeywords from '../../SqlLab/utils/sqlKeywords';
 import AdhocFilter, { EXPRESSION_TYPES, CLAUSES } from '../AdhocFilter';
 import adhocMetricType from '../propTypes/adhocMetricType';
 import columnType from '../propTypes/columnType';
-import OnPasteSelect from '../../components/OnPasteSelect';
-import VirtualizedRendererWrap from '../../components/VirtualizedRendererWrap';
 
 const propTypes = {
   adhocFilter: PropTypes.instanceOf(AdhocFilter).isRequired,
@@ -47,8 +41,6 @@ const propTypes = {
   height: PropTypes.number.isRequired,
 };
 
-const langTools = ace.acequire('ace/ext/language_tools');
-
 export default class AdhocFilterEditPopoverSqlTabContent extends React.Component {
   constructor(props) {
     super(props);
@@ -59,45 +51,24 @@ export default class AdhocFilterEditPopoverSqlTabContent extends React.Component
     this.handleAceEditorRef = this.handleAceEditorRef.bind(this);
 
     this.selectProps = {
-      multi: false,
+      isMulti: false,
       name: 'select-column',
       labelKey: 'label',
       autosize: false,
       clearable: false,
-      selectWrap: VirtualizedSelect,
     };
-
-    if (langTools) {
-      const words = sqlKeywords.concat(
-        this.props.options.map(option => {
-          if (option.column_name) {
-            return {
-              name: option.column_name,
-              value: option.column_name,
-              score: 50,
-              meta: 'option',
-            };
-          }
-          return null;
-        }),
-      );
-      const completer = {
-        getCompletions: (aceEditor, session, pos, prefix, callback) => {
-          callback(null, words);
-        },
-      };
-      langTools.setCompleters([completer]);
-    }
   }
 
   componentDidUpdate() {
-    this.aceEditorRef.editor.resize();
+    if (this.aceEditorRef) {
+      this.aceEditorRef.editor.resize();
+    }
   }
 
   onSqlExpressionClauseChange(clause) {
     this.props.onChange(
       this.props.adhocFilter.duplicateWith({
-        clause: clause && clause.clause,
+        clause,
         expressionType: EXPRESSION_TYPES.SQL,
       }),
     );
@@ -119,38 +90,49 @@ export default class AdhocFilterEditPopoverSqlTabContent extends React.Component
   }
 
   render() {
-    const { adhocFilter, height } = this.props;
+    const { adhocFilter, height, options } = this.props;
 
     const clauseSelectProps = {
       placeholder: t('choose WHERE or HAVING...'),
-      options: Object.keys(CLAUSES).map(clause => ({ clause })),
+      options: Object.keys(CLAUSES),
       value: adhocFilter.clause,
       onChange: this.onSqlExpressionClauseChange,
-      optionRenderer: VirtualizedRendererWrap(clause => clause.clause),
-      valueRenderer: clause => <span>{clause.clause}</span>,
-      valueKey: 'clause',
     };
+    const keywords = sqlKeywords.concat(
+      options
+        .map(option => {
+          if (option.column_name) {
+            return {
+              name: option.column_name,
+              value: option.column_name,
+              score: 50,
+              meta: 'option',
+            };
+          }
+          return null;
+        })
+        .filter(Boolean),
+    );
 
     return (
       <span>
         <FormGroup className="filter-edit-clause-section">
-          <OnPasteSelect
+          <Select
             {...this.selectProps}
             {...clauseSelectProps}
             className="filter-edit-clause-dropdown"
           />
           <span className="filter-edit-clause-info">
-            <strong>Where</strong> filters by columns.
+            <strong>WHERE</strong> {t('filters by columns')}
             <br />
-            <strong>Having</strong> filters by metrics.
+            <strong>HAVING</strong> {t('filters by metrics')}
           </span>
         </FormGroup>
         <FormGroup>
-          <AceEditor
+          <SQLEditor
             ref={this.handleAceEditorRef}
-            mode="sql"
-            theme="github"
-            height={height - 100 + 'px'}
+            keywords={keywords}
+            height={`${height - 130}px`}
             onChange={this.onSqlExpressionChange}
             width="100%"
             showGutter={false}

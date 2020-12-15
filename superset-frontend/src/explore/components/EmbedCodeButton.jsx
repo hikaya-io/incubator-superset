@@ -18,11 +18,13 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Popover, OverlayTrigger } from 'react-bootstrap';
-import { t } from '@superset-ui/translation';
+import { t } from '@superset-ui/core';
 
-import CopyToClipboard from './../../components/CopyToClipboard';
-import { getExploreLongUrl } from '../exploreUtils';
+import Popover from 'src/common/components/Popover';
+import FormLabel from 'src/components/FormLabel';
+import CopyToClipboard from 'src/components/CopyToClipboard';
+import { getShortUrl } from 'src/utils/common';
+import { getExploreLongUrl, getURIDirectory } from '../exploreUtils';
 
 const propTypes = {
   latestQueryFormData: PropTypes.object.isRequired,
@@ -34,23 +36,37 @@ export default class EmbedCodeButton extends React.Component {
     this.state = {
       height: '400',
       width: '600',
+      shortUrlId: 0,
     };
     this.handleInputChange = this.handleInputChange.bind(this);
+    this.getCopyUrl = this.getCopyUrl.bind(this);
+    this.onShortUrlSuccess = this.onShortUrlSuccess.bind(this);
+  }
+
+  onShortUrlSuccess(shortUrl) {
+    const shortUrlId = shortUrl.substring(shortUrl.indexOf('/r/') + 3);
+    this.setState(() => ({
+      shortUrlId,
+    }));
+  }
+
+  getCopyUrl() {
+    return getShortUrl(getExploreLongUrl(this.props.latestQueryFormData))
+      .then(this.onShortUrlSuccess)
+      .catch(this.props.addDangerToast);
   }
 
   handleInputChange(e) {
-    const value = e.currentTarget.value;
-    const name = e.currentTarget.name;
+    const { value, name } = e.currentTarget;
     const data = {};
     data[name] = value;
     this.setState(data);
   }
 
   generateEmbedHTML() {
-    const srcLink =
-      window.location.origin +
-      getExploreLongUrl(this.props.latestQueryFormData, 'standalone') +
-      `&height=${this.state.height}`;
+    const srcLink = `${window.location.origin + getURIDirectory()}?r=${
+      this.state.shortUrlId
+    }&standalone=true&height=${this.state.height}`;
     return (
       '<iframe\n' +
       `  width="${this.state.width}"\n` +
@@ -64,87 +80,80 @@ export default class EmbedCodeButton extends React.Component {
     );
   }
 
-  renderPopover() {
+  renderPopoverContent() {
     const html = this.generateEmbedHTML();
     return (
-      <Popover id="embed-code-popover">
-        <div>
-          <div className="row">
-            <div className="col-sm-10">
-              <textarea
-                name="embedCode"
-                value={html}
-                rows="4"
-                readOnly
+      <div id="embed-code-popover" data-test="embed-code-popover">
+        <div className="row">
+          <div className="col-sm-10">
+            <textarea
+              data-test="embed-code-textarea"
+              name="embedCode"
+              value={html}
+              rows="4"
+              readOnly
+              className="form-control input-sm"
+            />
+          </div>
+          <div className="col-sm-2">
+            <CopyToClipboard
+              shouldShowText={false}
+              text={html}
+              copyNode={
+                <i className="fa fa-clipboard" title={t('Copy to clipboard')} />
+              }
+            />
+          </div>
+        </div>
+        <br />
+        <div className="row">
+          <div className="col-md-6 col-sm-12">
+            <div className="form-group">
+              <small>
+                <FormLabel htmlFor="embed-height">{t('Height')}</FormLabel>
+              </small>
+              <input
                 className="form-control input-sm"
-              />
-            </div>
-            <div className="col-sm-2">
-              <CopyToClipboard
-                shouldShowText={false}
-                text={html}
-                copyNode={
-                  <i
-                    className="fa fa-clipboard"
-                    title={t('Copy to clipboard')}
-                  />
-                }
+                type="text"
+                defaultValue={this.state.height}
+                name="height"
+                onChange={this.handleInputChange}
               />
             </div>
           </div>
-          <br />
-          <div className="row">
-            <div className="col-md-6 col-sm-12">
-              <div className="form-group">
-                <small>
-                  <label className="control-label" htmlFor="embed-height">
-                    {t('Height')}
-                  </label>
-                </small>
-                <input
-                  className="form-control input-sm"
-                  type="text"
-                  defaultValue={this.state.height}
-                  name="height"
-                  onChange={this.handleInputChange}
-                />
-              </div>
-            </div>
-            <div className="col-md-6 col-sm-12">
-              <div className="form-group">
-                <small>
-                  <label className="control-label" htmlFor="embed-width">
-                    {t('Width')}
-                  </label>
-                </small>
-                <input
-                  className="form-control input-sm"
-                  type="text"
-                  defaultValue={this.state.width}
-                  name="width"
-                  onChange={this.handleInputChange}
-                  id="embed-width"
-                />
-              </div>
+          <div className="col-md-6 col-sm-12">
+            <div className="form-group">
+              <small>
+                <FormLabel htmlFor="embed-width">{t('Width')}</FormLabel>
+              </small>
+              <input
+                className="form-control input-sm"
+                type="text"
+                defaultValue={this.state.width}
+                name="width"
+                onChange={this.handleInputChange}
+                id="embed-width"
+              />
             </div>
           </div>
         </div>
-      </Popover>
+      </div>
     );
   }
+
   render() {
     return (
-      <OverlayTrigger
+      <Popover
         trigger="click"
-        rootClose
         placement="left"
-        overlay={this.renderPopover()}
+        onClick={this.getCopyUrl}
+        content={this.renderPopoverContent()}
       >
         <span className="btn btn-default btn-sm" data-test="embed-code-button">
           <i className="fa fa-code" />
           &nbsp;
         </span>
-      </OverlayTrigger>
+      </Popover>
     );
   }
 }

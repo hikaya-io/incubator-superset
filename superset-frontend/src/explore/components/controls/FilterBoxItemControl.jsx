@@ -18,14 +18,32 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
-import { OverlayTrigger, Popover } from 'react-bootstrap';
-import { t } from '@superset-ui/translation';
+import { t } from '@superset-ui/core';
+import { InfoTooltipWithTrigger } from '@superset-ui/chart-controls';
 
-import InfoTooltipWithTrigger from '../../../components/InfoTooltipWithTrigger';
+import Popover from 'src/common/components/Popover';
 import FormRow from '../../../components/FormRow';
 import SelectControl from './SelectControl';
 import CheckboxControl from './CheckboxControl';
 import TextControl from './TextControl';
+import { FILTER_CONFIG_ATTRIBUTES } from '../../constants';
+
+const INTEGRAL_TYPES = new Set([
+  'TINYINT',
+  'SMALLINT',
+  'INT',
+  'INTEGER',
+  'BIGINT',
+  'LONG',
+]);
+const DECIMAL_TYPES = new Set([
+  'FLOAT',
+  'DOUBLE',
+  'REAL',
+  'NUMERIC',
+  'DECIMAL',
+  'MONEY',
+]);
 
 const propTypes = {
   datasource: PropTypes.object.isRequired,
@@ -34,7 +52,9 @@ const propTypes = {
   clearable: PropTypes.bool,
   multiple: PropTypes.bool,
   column: PropTypes.string,
+  label: PropTypes.string,
   metric: PropTypes.string,
+  searchAllOptions: PropTypes.bool,
   defaultValue: PropTypes.string,
 };
 
@@ -43,6 +63,7 @@ const defaultProps = {
   asc: true,
   clearable: true,
   multiple: true,
+  searchAllOptions: false,
 };
 
 const STYLE_WIDTH = { width: 350 };
@@ -50,22 +71,65 @@ const STYLE_WIDTH = { width: 350 };
 export default class FilterBoxItemControl extends React.Component {
   constructor(props) {
     super(props);
-    const { column, metric, asc, clearable, multiple, defaultValue } = props;
-    const state = { column, metric, asc, clearable, multiple, defaultValue };
-    this.state = state;
+    const {
+      column,
+      metric,
+      asc,
+      clearable,
+      multiple,
+      searchAllOptions,
+      label,
+      defaultValue,
+    } = props;
+    this.state = {
+      column,
+      metric,
+      label,
+      asc,
+      clearable,
+      multiple,
+      searchAllOptions,
+      defaultValue,
+    };
     this.onChange = this.onChange.bind(this);
     this.onControlChange = this.onControlChange.bind(this);
   }
+
   onChange() {
     this.props.onChange(this.state);
   }
+
   onControlChange(attr, value) {
-    this.setState({ [attr]: value }, this.onChange);
+    let typedValue = value;
+    const { column: selectedColumnName, multiple } = this.state;
+    if (value && !multiple && attr === FILTER_CONFIG_ATTRIBUTES.DEFAULT_VALUE) {
+      // if single value filter_box,
+      // convert input value string to the column's data type
+      const { datasource } = this.props;
+      const selectedColumn = datasource.columns.find(
+        col => col.column_name === selectedColumnName,
+      );
+
+      if (selectedColumn && selectedColumn.type) {
+        const type = selectedColumn.type.toUpperCase();
+        if (type === 'BOOLEAN') {
+          typedValue = value === 'true';
+        } else if (INTEGRAL_TYPES.has(type)) {
+          typedValue = Number.isNaN(Number(value)) ? null : parseInt(value, 10);
+        } else if (DECIMAL_TYPES.has(type)) {
+          typedValue = Number.isNaN(Number(value)) ? null : parseFloat(value);
+        }
+      }
+    }
+    this.setState({ [attr]: typedValue }, this.onChange);
   }
+
   setType() {}
+
   textSummary() {
     return this.state.column || 'N/A';
   }
+
   renderForm() {
     return (
       <div>
@@ -110,7 +174,9 @@ export default class FilterBoxItemControl extends React.Component {
             <TextControl
               value={this.state.defaultValue}
               name="defaultValue"
-              onChange={v => this.onControlChange('defaultValue', v)}
+              onChange={v =>
+                this.onControlChange(FILTER_CONFIG_ATTRIBUTES.DEFAULT_VALUE, v)
+              }
             />
           }
         />
@@ -155,7 +221,29 @@ export default class FilterBoxItemControl extends React.Component {
           control={
             <CheckboxControl
               value={this.state.multiple}
-              onChange={v => this.onControlChange('multiple', v)}
+              onChange={v =>
+                this.onControlChange(FILTER_CONFIG_ATTRIBUTES.MULTIPLE, v)
+              }
+            />
+          }
+        />
+        <FormRow
+          label={t('Search All Filter Options')}
+          tooltip={t(
+            'By default, each filter loads at most 1000 choices at the initial page load. ' +
+              'Check this box if you have more than 1000 filter values and want to enable dynamically ' +
+              'searching that loads filter values as users type (may add stress to your database).',
+          )}
+          isCheckbox
+          control={
+            <CheckboxControl
+              value={this.state.searchAllOptions}
+              onChange={v =>
+                this.onControlChange(
+                  FILTER_CONFIG_ATTRIBUTES.SEARCH_ALL_OPTIONS,
+                  v,
+                )
+              }
             />
           }
         />
@@ -173,31 +261,31 @@ export default class FilterBoxItemControl extends React.Component {
       </div>
     );
   }
+
   renderPopover() {
     return (
-      <Popover id="ts-col-popo" title={t('Filter Configuration')}>
-        <div style={STYLE_WIDTH}>{this.renderForm()}</div>
-      </Popover>
+      <div id="ts-col-popo" style={STYLE_WIDTH}>
+        {this.renderForm()}
+      </div>
     );
   }
+
   render() {
     return (
       <span>
         {this.textSummary()}{' '}
-        <OverlayTrigger
-          container={document.body}
+        <Popover
           trigger="click"
-          rootClose
-          ref="trigger"
           placement="right"
-          overlay={this.renderPopover()}
+          content={this.renderPopover()}
+          title={t('Filter Configuration')}
         >
           <InfoTooltipWithTrigger
             icon="edit"
             className="text-primary"
             label="edit-ts-column"
           />
-        </OverlayTrigger>
+        </Popover>
       </span>
     );
   }

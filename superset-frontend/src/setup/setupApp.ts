@@ -18,18 +18,22 @@
  */
 /* eslint global-require: 0 */
 import $ from 'jquery';
-import { SupersetClient } from '@superset-ui/connection';
-import getClientErrorObject from '../utils/getClientErrorObject';
+import { SupersetClient } from '@superset-ui/core';
+import {
+  getClientErrorObject,
+  ClientErrorObject,
+} from '../utils/getClientErrorObject';
+import setupErrorMessages from './setupErrorMessages';
 
-function showApiMessage(resp: { severity?: string; message: string }) {
+function showApiMessage(resp: ClientErrorObject) {
   const template =
     '<div class="alert"> ' +
     '<button type="button" class="close" ' +
     'data-dismiss="alert">\xD7</button> </div>';
   const severity = resp.severity || 'info';
   $(template)
-    .addClass('alert-' + severity)
-    .append(resp.message)
+    .addClass(`alert-${severity}`)
+    .append(resp.message || '')
     .appendTo($('#alert-container'));
 }
 
@@ -48,16 +52,18 @@ function toggleCheckbox(apiUrlPrefix: string, selector: string) {
 }
 
 export default function setupApp() {
-  $(document).ready(function() {
-    $(':checkbox[data-checkbox-api-prefix]').change(function() {
+  $(document).ready(function () {
+    $(':checkbox[data-checkbox-api-prefix]').change(function (
+      this: HTMLElement,
+    ) {
       const $this = $(this);
       const prefix = $this.data('checkbox-api-prefix');
       const id = $this.attr('id');
-      toggleCheckbox(prefix, '#' + id);
+      toggleCheckbox(prefix, `#${id}`);
     });
 
     // for language picker dropdown
-    $('#language-picker a').click(function(
+    $('#language-picker a').click(function (
       ev: JQuery.ClickEvent<
         HTMLLinkElement,
         null,
@@ -67,19 +73,20 @@ export default function setupApp() {
     ) {
       ev.preventDefault();
       SupersetClient.get({
-        endpoint: ev.currentTarget.href,
+        url: ev.currentTarget.href,
         parseMethod: null,
       }).then(() => {
-        location.reload();
+        window.location.reload();
       });
     });
   });
 
   // A set of hacks to allow apps to run within a FAB template
   // this allows for the server side generated menus to function
-  // @ts-ignore
   window.$ = $;
-  // @ts-ignore
   window.jQuery = $;
   require('bootstrap');
+
+  // setup appwide custom error messages
+  setupErrorMessages();
 }

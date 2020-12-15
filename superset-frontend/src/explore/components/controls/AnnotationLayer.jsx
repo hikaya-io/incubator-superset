@@ -19,19 +19,23 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import { CompactPicker } from 'react-color';
-import { Button } from 'react-bootstrap';
-import mathjs from 'mathjs';
-import { t } from '@superset-ui/translation';
-import { SupersetClient } from '@superset-ui/connection';
-import { getCategoricalSchemeRegistry } from '@superset-ui/color';
-import { getChartMetadataRegistry } from '@superset-ui/chart';
+import Button from 'src/components/Button';
+import { parse as mathjsParse } from 'mathjs';
+import {
+  t,
+  SupersetClient,
+  getCategoricalSchemeRegistry,
+  getChartMetadataRegistry,
+  validateNonEmpty,
+} from '@superset-ui/core';
 
 import SelectControl from './SelectControl';
 import TextControl from './TextControl';
 import CheckboxControl from './CheckboxControl';
 
-import ANNOTATION_TYPES, {
+import {
   ANNOTATION_SOURCE_TYPES,
+  ANNOTATION_TYPES,
   ANNOTATION_TYPES_METADATA,
   DEFAULT_ANNOTATION_TYPE,
   requiresQuery,
@@ -40,7 +44,6 @@ import ANNOTATION_TYPES, {
 
 import PopoverSection from '../../../components/PopoverSection';
 import ControlHeader from '../ControlHeader';
-import { nonEmpty } from '../../validators';
 import './AnnotationLayer.less';
 
 const AUTOMATIC_COLOR = '';
@@ -115,20 +118,29 @@ export default class AnnotationLayer extends React.PureComponent {
       descriptionColumns,
       timeColumn,
       intervalEndColumn,
+      vizType,
     } = props;
 
-    const overridesKeys = Object.keys(overrides);
-    if (overridesKeys.includes('since') || overridesKeys.includes('until')) {
+    // Only allow override whole time_range
+    if ('since' in overrides || 'until' in overrides) {
       overrides.time_range = null;
       delete overrides.since;
       delete overrides.until;
     }
 
+    // Check if annotationType is supported by this chart
+    const metadata = getChartMetadataRegistry().get(vizType);
+    const supportedAnnotationTypes = metadata?.supportedAnnotationTypes || [];
+    const validAnnotationType = supportedAnnotationTypes.includes(
+      annotationType,
+    )
+      ? annotationType
+      : supportedAnnotationTypes[0];
+
     this.state = {
       // base
       name,
-      oldName: !this.props.name ? null : name,
-      annotationType,
+      annotationType: validAnnotationType,
       sourceType,
       value,
       overrides,
@@ -146,10 +158,9 @@ export default class AnnotationLayer extends React.PureComponent {
       showMarkers,
       hideLine,
       // refData
-      isNew: !this.props.name,
+      isNew: !name,
       isLoadingOptions: true,
       valueOptions: [],
-      validationErrors: {},
     };
     this.submitAnnotation = this.submitAnnotation.bind(this);
     this.deleteAnnotation = this.deleteAnnotation.bind(this);
@@ -186,7 +197,7 @@ export default class AnnotationLayer extends React.PureComponent {
         label: chartMetadata.name,
       }));
     // Prepend native source if applicable
-    if (ANNOTATION_TYPES_METADATA[annotationType].supportNativeSource) {
+    if (ANNOTATION_TYPES_METADATA[annotationType]?.supportNativeSource) {
       sources.unshift(ANNOTATION_SOURCE_TYPES_METADATA.NATIVE);
     }
     return sources;
@@ -195,10 +206,7 @@ export default class AnnotationLayer extends React.PureComponent {
   isValidFormula(value, annotationType) {
     if (annotationType === ANNOTATION_TYPES.FORMULA) {
       try {
-        mathjs
-          .parse(value)
-          .compile()
-          .eval({ x: 0 });
+        mathjsParse(value).compile().evaluate({ x: 0 });
       } catch (err) {
         return true;
       }
@@ -215,14 +223,18 @@ export default class AnnotationLayer extends React.PureComponent {
       timeColumn,
       intervalEndColumn,
     } = this.state;
-    const errors = [nonEmpty(name), nonEmpty(annotationType), nonEmpty(value)];
+    const errors = [
+      validateNonEmpty(name),
+      validateNonEmpty(annotationType),
+      validateNonEmpty(value),
+    ];
     if (sourceType !== ANNOTATION_SOURCE_TYPES.NATIVE) {
       if (annotationType === ANNOTATION_TYPES.EVENT) {
-        errors.push(nonEmpty(timeColumn));
+        errors.push(validateNonEmpty(timeColumn));
       }
       if (annotationType === ANNOTATION_TYPES.INTERVAL) {
-        errors.push(nonEmpty(timeColumn));
-        errors.push(nonEmpty(intervalEndColumn));
+        errors.push(validateNonEmpty(timeColumn));
+        errors.push(validateNonEmpty(intervalEndColumn));
       }
     }
     errors.push(this.isValidFormula(value, annotationType));
@@ -233,18 +245,16 @@ export default class AnnotationLayer extends React.PureComponent {
     this.setState({
       annotationType,
       sourceType: null,
-      validationErrors: {},
       value: null,
     });
   }
 
   handleAnnotationSourceType(sourceType) {
-    this.setState({
-      sourceType,
-      isLoadingOptions: true,
-      validationErrors: {},
-      value: null,
-    });
+    const { sourceType: prevSourceType } = this.state;
+
+    if (prevSourceType !== sourceType) {
+      this.setState({ sourceType, value: null, isLoadingOptions: true });
+    }
   }
 
   handleValue(value) {
@@ -259,7 +269,7 @@ export default class AnnotationLayer extends React.PureComponent {
   }
 
   fetchOptions(annotationType, sourceType, isLoadingOptions) {
-    if (isLoadingOptions === true) {
+    if (isLoadingOptions) {
       if (sourceType === ANNOTATION_SOURCE_TYPES.NATIVE) {
         SupersetClient.get({
           endpoint: '/annotationlayermodelview/api/read?',
@@ -302,28 +312,43 @@ export default class AnnotationLayer extends React.PureComponent {
   }
 
   deleteAnnotation() {
+    this.props.removeAnnotationLayer();
     this.props.close();
-    if (!this.state.isNew) {
-      this.props.removeAnnotationLayer(this.state);
-    }
   }
 
   applyAnnotation() {
-    if (this.state.name.length) {
-      const annotation = {};
-      Object.keys(this.state).forEach(k => {
-        if (this.state[k] !== null) {
-          annotation[k] = this.state[k];
+    if (this.isValidForm()) {
+      const annotationFields = [
+        'name',
+        'annotationType',
+        'sourceType',
+        'color',
+        'opacity',
+        'style',
+        'width',
+        'showMarkers',
+        'hideLine',
+        'value',
+        'overrides',
+        'show',
+        'titleColumn',
+        'descriptionColumns',
+        'timeColumn',
+        'intervalEndColumn',
+      ];
+      const newAnnotation = {};
+      annotationFields.forEach(field => {
+        if (this.state[field] !== null) {
+          newAnnotation[field] = this.state[field];
         }
       });
-      delete annotation.isNew;
-      delete annotation.valueOptions;
-      delete annotation.isLoadingOptions;
-      delete annotation.validationErrors;
-      annotation.color =
-        annotation.color === AUTOMATIC_COLOR ? null : annotation.color;
-      this.props.addAnnotationLayer(annotation);
-      this.setState({ isNew: false, oldName: this.state.name });
+
+      if (newAnnotation.color === AUTOMATIC_COLOR) {
+        newAnnotation.color = null;
+      }
+
+      this.props.addAnnotationLayer(newAnnotation);
+      this.setState({ isNew: false });
     }
   }
 
@@ -355,7 +380,7 @@ export default class AnnotationLayer extends React.PureComponent {
         label = 'Annotation Layer';
         description = 'Select the Annotation Layer you would like to use.';
       } else {
-        label = label = t('Chart');
+        label = t('Chart');
         description = `Use a pre defined Superset Chart as a source for annotations and overlays.
         your chart must be one of these visualization types:
         [${this.getSupportedSourceTypes(annotationType)
@@ -418,7 +443,7 @@ export default class AnnotationLayer extends React.PureComponent {
       intervalEndColumn,
       descriptionColumns,
     } = this.state;
-    const slice = (valueOptions.find(x => x.value === value) || {}).slice;
+    const { slice } = valueOptions.find(x => x.value === value) || {};
     if (sourceType !== ANNOTATION_SOURCE_TYPES.NATIVE && slice) {
       const columns = (slice.data.groupby || [])
         .concat(slice.data.all_columns || [])
@@ -445,7 +470,7 @@ export default class AnnotationLayer extends React.PureComponent {
                     ? 'Interval Start column'
                     : 'Event Time Column'
                 }
-                description={'This column must contain date/time information.'}
+                description="This column must contain date/time information."
                 validationErrors={!timeColumn ? ['Mandatory'] : []}
                 clearable={false}
                 options={timeColumnOptions}
@@ -458,7 +483,7 @@ export default class AnnotationLayer extends React.PureComponent {
                 hovered
                 name="annotation-layer-intervalEnd"
                 label="Interval End column"
-                description={'This column must contain date/time information.'}
+                description="This column must contain date/time information."
                 validationErrors={!intervalEndColumn ? ['Mandatory'] : []}
                 options={columns}
                 value={intervalEndColumn}
@@ -469,7 +494,7 @@ export default class AnnotationLayer extends React.PureComponent {
               hovered
               name="annotation-layer-title"
               label="Title Column"
-              description={'Pick a title for you annotation.'}
+              description="Pick a title for you annotation."
               options={[{ value: '', label: 'None' }].concat(columns)}
               value={titleColumn}
               onChange={v => this.setState({ titleColumn: v })}
@@ -494,7 +519,7 @@ export default class AnnotationLayer extends React.PureComponent {
                 label="Override time range"
                 description={`This controls whether the "time_range" field from the current
                   view should be passed down to the chart containing the annotation data.`}
-                value={!!Object.keys(overrides).find(x => x === 'time_range')}
+                value={'time_range' in overrides}
                 onChange={v => {
                   delete overrides.time_range;
                   if (v) {
@@ -512,9 +537,7 @@ export default class AnnotationLayer extends React.PureComponent {
                 label="Override time grain"
                 description={`This controls whether the time grain field from the current
                   view should be passed down to the chart containing the annotation data.`}
-                value={
-                  !!Object.keys(overrides).find(x => x === 'time_grain_sqla')
-                }
+                value={'time_grain_sqla' in overrides}
                 onChange={v => {
                   delete overrides.time_grain_sqla;
                   delete overrides.granularity;
@@ -589,6 +612,7 @@ export default class AnnotationLayer extends React.PureComponent {
             { value: 'dotted', label: 'Dotted' },
           ]}
           value={style}
+          clearable={false}
           onChange={v => this.setState({ style: v })}
         />
         <SelectControl
@@ -614,8 +638,8 @@ export default class AnnotationLayer extends React.PureComponent {
             />
             <Button
               style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}
-              bsStyle={color === AUTOMATIC_COLOR ? 'success' : 'default'}
-              bsSize="xsmall"
+              buttonStyle={color === AUTOMATIC_COLOR ? 'success' : 'default'}
+              buttonSize="xsmall"
               onClick={() => this.setState({ color: AUTOMATIC_COLOR })}
             >
               Automatic Color
@@ -634,7 +658,7 @@ export default class AnnotationLayer extends React.PureComponent {
             hovered
             name="annotation-layer-show-markers"
             label="Show Markers"
-            description={'Shows or hides markers for the time series'}
+            description="Shows or hides markers for the time series"
             value={showMarkers}
             onChange={v => this.setState({ showMarkers: v })}
           />
@@ -644,7 +668,7 @@ export default class AnnotationLayer extends React.PureComponent {
             hovered
             name="annotation-layer-hide-line"
             label="Hide Line"
-            description={'Hides the Line for the time series'}
+            description="Hides the Line for the time series"
             value={hideLine}
             onChange={v => this.setState({ hideLine: v })}
           />
@@ -656,7 +680,6 @@ export default class AnnotationLayer extends React.PureComponent {
   render() {
     const { isNew, name, annotationType, sourceType, show } = this.state;
     const isValid = this.isValidForm();
-
     const metadata = getChartMetadataRegistry().get(this.props.vizType);
     const supportedAnnotationTypes = metadata
       ? metadata.supportedAnnotationTypes.map(
@@ -666,7 +689,7 @@ export default class AnnotationLayer extends React.PureComponent {
     const supportedSourceTypes = this.getSupportedSourceTypes(annotationType);
 
     return (
-      <div>
+      <>
         {this.props.error && (
           <span style={{ color: 'red' }}>ERROR: {this.props.error}</span>
         )}
@@ -697,11 +720,12 @@ export default class AnnotationLayer extends React.PureComponent {
                 description={t('Choose the Annotation Layer Type')}
                 label={t('Annotation Layer Type')}
                 name="annotation-layer-type"
+                clearable={false}
                 options={supportedAnnotationTypes}
                 value={annotationType}
                 onChange={this.handleAnnotationType}
               />
-              {!!supportedSourceTypes.length && (
+              {supportedSourceTypes.length > 0 && (
                 <SelectControl
                   hovered
                   description="Choose the source of your annotations"
@@ -710,6 +734,7 @@ export default class AnnotationLayer extends React.PureComponent {
                   options={supportedSourceTypes}
                   value={sourceType}
                   onChange={this.handleAnnotationSourceType}
+                  validationErrors={!sourceType ? [t('Mandatory')] : []}
                 />
               )}
               {this.renderValueConfiguration()}
@@ -719,12 +744,18 @@ export default class AnnotationLayer extends React.PureComponent {
           {this.renderDisplayConfiguration()}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Button bsSize="sm" onClick={this.deleteAnnotation}>
-            {!isNew ? t('Remove') : t('Cancel')}
-          </Button>
+          {isNew ? (
+            <Button buttonSize="sm" onClick={() => this.props.close()}>
+              {t('Cancel')}
+            </Button>
+          ) : (
+            <Button buttonSize="sm" onClick={this.deleteAnnotation}>
+              {t('Remove')}
+            </Button>
+          )}
           <div>
             <Button
-              bsSize="sm"
+              buttonSize="sm"
               disabled={!isValid}
               onClick={this.applyAnnotation}
             >
@@ -732,7 +763,8 @@ export default class AnnotationLayer extends React.PureComponent {
             </Button>
 
             <Button
-              bsSize="sm"
+              buttonSize="sm"
+              buttonStyle="primary"
               disabled={!isValid}
               onClick={this.submitAnnotation}
             >
@@ -740,7 +772,7 @@ export default class AnnotationLayer extends React.PureComponent {
             </Button>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 }

@@ -20,13 +20,20 @@ import sinon from 'sinon';
 
 import URI from 'urijs';
 import {
-  getExploreUrlAndPayload,
+  buildV1ChartDataPayload,
+  getExploreUrl,
   getExploreLongUrl,
-} from '../../../src/explore/exploreUtils';
-import * as hostNamesConfig from '../../../src/utils/hostNamesConfig';
+  shouldUseLegacyApi,
+} from 'src/explore/exploreUtils';
+import {
+  buildTimeRangeString,
+  formatTimeRange,
+} from 'src/explore/dateFilterUtils';
+import * as hostNamesConfig from 'src/utils/hostNamesConfig';
+import { getChartMetadataRegistry } from '@superset-ui/core';
 
 describe('exploreUtils', () => {
-  const location = window.location;
+  const { location } = window;
   const formData = {
     datasource: '1__table',
   };
@@ -35,33 +42,31 @@ describe('exploreUtils', () => {
     expect(uri1.toString()).toBe(uri2.toString());
   }
 
-  describe('getExploreUrlAndPayload', () => {
+  describe('getExploreUrl', () => {
     it('generates proper base url', () => {
       // This assertion is to show clearly the value of location.href
       // in the context of unit tests.
       expect(location.href).toBe('http://localhost/');
 
-      const { url, payload } = getExploreUrlAndPayload({
+      const url = getExploreUrl({
         formData,
         endpointType: 'base',
         force: false,
         curUrl: 'http://superset.com',
       });
       compareURI(URI(url), URI('/superset/explore/'));
-      expect(payload).toEqual(formData);
     });
     it('generates proper json url', () => {
-      const { url, payload } = getExploreUrlAndPayload({
+      const url = getExploreUrl({
         formData,
         endpointType: 'json',
         force: false,
         curUrl: 'http://superset.com',
       });
       compareURI(URI(url), URI('/superset/explore_json/'));
-      expect(payload).toEqual(formData);
     });
     it('generates proper json forced url', () => {
-      const { url, payload } = getExploreUrlAndPayload({
+      const url = getExploreUrl({
         formData,
         endpointType: 'json',
         force: true,
@@ -71,10 +76,9 @@ describe('exploreUtils', () => {
         URI(url),
         URI('/superset/explore_json/').search({ force: 'true' }),
       );
-      expect(payload).toEqual(formData);
     });
     it('generates proper csv URL', () => {
-      const { url, payload } = getExploreUrlAndPayload({
+      const url = getExploreUrl({
         formData,
         endpointType: 'csv',
         force: false,
@@ -84,10 +88,9 @@ describe('exploreUtils', () => {
         URI(url),
         URI('/superset/explore_json/').search({ csv: 'true' }),
       );
-      expect(payload).toEqual(formData);
     });
     it('generates proper standalone URL', () => {
-      const { url, payload } = getExploreUrlAndPayload({
+      const url = getExploreUrl({
         formData,
         endpointType: 'standalone',
         force: false,
@@ -97,10 +100,9 @@ describe('exploreUtils', () => {
         URI(url),
         URI('/superset/explore/').search({ standalone: 'true' }),
       );
-      expect(payload).toEqual(formData);
     });
     it('preserves main URLs params', () => {
-      const { url, payload } = getExploreUrlAndPayload({
+      const url = getExploreUrl({
         formData,
         endpointType: 'json',
         force: false,
@@ -110,10 +112,9 @@ describe('exploreUtils', () => {
         URI(url),
         URI('/superset/explore_json/').search({ foo: 'bar' }),
       );
-      expect(payload).toEqual(formData);
     });
     it('generate proper save slice url', () => {
-      const { url, payload } = getExploreUrlAndPayload({
+      const url = getExploreUrl({
         formData,
         endpointType: 'json',
         force: false,
@@ -123,20 +124,6 @@ describe('exploreUtils', () => {
         URI(url),
         URI('/superset/explore_json/').search({ foo: 'bar' }),
       );
-      expect(payload).toEqual(formData);
-    });
-    it('generate proper saveas slice url', () => {
-      const { url, payload } = getExploreUrlAndPayload({
-        formData,
-        endpointType: 'json',
-        force: false,
-        curUrl: 'superset.com?foo=bar',
-      });
-      compareURI(
-        URI(url),
-        URI('/superset/explore_json/').search({ foo: 'bar' }),
-      );
-      expect(payload).toEqual(formData);
     });
   });
 
@@ -158,48 +145,48 @@ describe('exploreUtils', () => {
     });
 
     it('generate url to different domains', () => {
-      let url = getExploreUrlAndPayload({
+      let url = getExploreUrl({
         formData,
         endpointType: 'json',
         allowDomainSharding: true,
-      }).url;
+      });
       // skip main domain for fetching chart if domain sharding is enabled
       // to leave main domain free for other calls like fav star, save change, etc.
       expect(url).toMatch(availableDomains[1]);
 
-      url = getExploreUrlAndPayload({
+      url = getExploreUrl({
         formData,
         endpointType: 'json',
         allowDomainSharding: true,
-      }).url;
+      });
       expect(url).toMatch(availableDomains[2]);
 
-      url = getExploreUrlAndPayload({
+      url = getExploreUrl({
         formData,
         endpointType: 'json',
         allowDomainSharding: true,
-      }).url;
+      });
       expect(url).toMatch(availableDomains[3]);
 
       // circle back to first available domain
-      url = getExploreUrlAndPayload({
+      url = getExploreUrl({
         formData,
         endpointType: 'json',
         allowDomainSharding: true,
-      }).url;
+      });
       expect(url).toMatch(availableDomains[1]);
     });
     it('not generate url to different domains without flag', () => {
-      let csvURL = getExploreUrlAndPayload({
+      let csvURL = getExploreUrl({
         formData,
         endpointType: 'csv',
-      }).url;
+      });
       expect(csvURL).toMatch(availableDomains[0]);
 
-      csvURL = getExploreUrlAndPayload({
+      csvURL = getExploreUrl({
         formData,
         endpointType: 'csv',
-      }).url;
+      });
       expect(csvURL).toMatch(availableDomains[0]);
     });
   });
@@ -209,6 +196,90 @@ describe('exploreUtils', () => {
       compareURI(
         URI(getExploreLongUrl(formData, 'base')),
         URI('/superset/explore/').search({ form_data: sFormData }),
+      );
+    });
+  });
+
+  describe('buildV1ChartDataPayload', () => {
+    it('generate valid request payload despite no registered buildQuery', () => {
+      const v1RequestPayload = buildV1ChartDataPayload({
+        formData: { ...formData, viz_type: 'my_custom_viz' },
+      });
+      expect(v1RequestPayload).hasOwnProperty('queries');
+    });
+  });
+
+  describe('shouldUseLegacyApi', () => {
+    beforeAll(() => {
+      getChartMetadataRegistry()
+        .registerValue('my_legacy_viz', { useLegacyApi: true })
+        .registerValue('my_v1_viz', { useLegacyApi: false });
+    });
+
+    afterAll(() => {
+      getChartMetadataRegistry().remove('my_legacy_viz').remove('my_v1_viz');
+    });
+
+    it('returns true for legacy viz', () => {
+      const useLegacyApi = shouldUseLegacyApi({
+        ...formData,
+        viz_type: 'my_legacy_viz',
+      });
+      expect(useLegacyApi).toBe(true);
+    });
+
+    it('returns false for v1 viz', () => {
+      const useLegacyApi = shouldUseLegacyApi({
+        ...formData,
+        viz_type: 'my_v1_viz',
+      });
+      expect(useLegacyApi).toBe(false);
+    });
+
+    it('returns false for formData with unregistered viz_type', () => {
+      const useLegacyApi = shouldUseLegacyApi({
+        ...formData,
+        viz_type: 'undefined_viz',
+      });
+      expect(useLegacyApi).toBe(false);
+    });
+
+    it('returns false for formData without viz_type', () => {
+      const useLegacyApi = shouldUseLegacyApi(formData);
+      expect(useLegacyApi).toBe(false);
+    });
+  });
+
+  describe('buildTimeRangeString', () => {
+    it('generates proper time range string', () => {
+      expect(
+        buildTimeRangeString('2010-07-30T00:00:00', '2020-07-30T00:00:00'),
+      ).toBe('2010-07-30T00:00:00 : 2020-07-30T00:00:00');
+      expect(buildTimeRangeString('', '2020-07-30T00:00:00')).toBe(
+        ' : 2020-07-30T00:00:00',
+      );
+      expect(buildTimeRangeString('', '')).toBe(' : ');
+    });
+  });
+
+  describe('formatTimeRange', () => {
+    it('generates a readable time range', () => {
+      expect(formatTimeRange('Last 7 days')).toBe('Last 7 days');
+      expect(formatTimeRange('No filter')).toBe('No filter');
+      expect(formatTimeRange('Yesterday : Tomorrow')).toBe(
+        'Yesterday < col < Tomorrow',
+      );
+      expect(
+        formatTimeRange('2010-07-30T00:00:00 : 2020-07-30T00:00:00', [
+          'inclusive',
+          'exclusive',
+        ]),
+      ).toBe('2010-07-30 ≤ col < 2020-07-30');
+      expect(
+        formatTimeRange('2010-07-30T01:00:00 : ', ['exclusive', 'inclusive']),
+      ).toBe('2010-07-30T01:00:00 < col ≤ ∞');
+      expect(formatTimeRange(' : 2020-07-30T00:00:00')).toBe(
+        '-∞ < col < 2020-07-30',
       );
     });
   });

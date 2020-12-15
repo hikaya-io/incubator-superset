@@ -20,23 +20,21 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import cx from 'classnames';
 
-import FilterBadgeIcon from '../../../components/FilterBadgeIcon';
+import FormLabel from 'src/components/FormLabel';
 
 const propTypes = {
   label: PropTypes.string.isRequired,
-  colorCode: PropTypes.string.isRequired,
   isSelected: PropTypes.bool.isRequired,
 };
 
-export default function FilterFieldItem({ label, colorCode, isSelected }) {
+export default function FilterFieldItem({ label, isSelected }) {
   return (
     <a
       className={cx('filter-field-item filter-container', {
         'is-selected': isSelected,
       })}
     >
-      <FilterBadgeIcon colorCode={colorCode} />
-      <label htmlFor={label}>{label}</label>
+      <FormLabel htmlFor={label}>{label}</FormLabel>
     </a>
   );
 }

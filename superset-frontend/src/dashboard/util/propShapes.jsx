@@ -68,19 +68,7 @@ export const slicePropShape = PropTypes.shape({
   viz_type: PropTypes.string.isRequired,
   description: PropTypes.string,
   description_markeddown: PropTypes.string,
-});
-
-export const filterIndicatorPropShape = PropTypes.shape({
-  chartId: PropTypes.number.isRequired,
-  colorCode: PropTypes.string.isRequired,
-  componentId: PropTypes.string.isRequired,
-  directPathToFilter: PropTypes.arrayOf(PropTypes.string).isRequired,
-  isDateFilter: PropTypes.bool.isRequired,
-  isFilterFieldActive: PropTypes.bool.isRequired,
-  isInstantFilter: PropTypes.bool.isRequired,
-  label: PropTypes.string.isRequired,
-  name: PropTypes.string.isRequired,
-  values: PropTypes.array.isRequired,
+  owners: PropTypes.arrayOf(PropTypes.string),
 });
 
 export const dashboardFilterPropShape = PropTypes.shape({
@@ -101,7 +89,6 @@ export const dashboardStatePropShape = PropTypes.shape({
   expandedSlices: PropTypes.object,
   editMode: PropTypes.bool,
   isPublished: PropTypes.bool.isRequired,
-  builderPaneType: PropTypes.string.isRequired,
   colorNamespace: PropTypes.string,
   colorScheme: PropTypes.string,
   updatedColorScheme: PropTypes.bool,

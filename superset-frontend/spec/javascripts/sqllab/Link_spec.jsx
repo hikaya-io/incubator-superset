@@ -19,7 +19,7 @@
 import React from 'react';
 import { shallow } from 'enzyme';
 
-import Link from '../../../src/SqlLab/components/Link';
+import Link from 'src/components/Link';
 
 describe('Link', () => {
   const mockedProps = {
@@ -34,6 +34,6 @@ describe('Link', () => {
   });
   it('renders an anchor tag', () => {
     const wrapper = shallow(<Link {...mockedProps}>TEST</Link>);
-    expect(wrapper.find('a')).toHaveLength(1);
+    expect(wrapper.find('a')).toExist();
   });
 });

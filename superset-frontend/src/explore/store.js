@@ -17,9 +17,9 @@
  * under the License.
  */
 /* eslint camelcase: 0 */
-import { getChartControlPanelRegistry } from '@superset-ui/chart';
+import { getChartControlPanelRegistry } from '@superset-ui/core';
 import { getAllControlsState, getFormDataFromControls } from './controlUtils';
-import controls from './controls';
+import { controls } from './controls';
 
 function handleDeprecatedControls(formData) {
   // Reacffectation / handling of deprecated controls
@@ -39,9 +39,8 @@ export function getControlsState(state, inputFormData) {
    * adds value keys coming from inputFormData passed here. This can't be an action creator
    * just yet because it's used in both the explore and dashboard views.
    * */
-
   // Getting a list of active control names for the current viz
-  const formData = Object.assign({}, inputFormData);
+  const formData = { ...inputFormData };
   const vizType = formData.viz_type || 'table';
 
   handleDeprecatedControls(formData);
@@ -67,20 +66,23 @@ export function applyDefaultFormData(inputFormData) {
   const controlsState = getAllControlsState(vizType, datasourceType, null, {
     ...inputFormData,
   });
-  const formData = {};
+  const controlFormData = getFormDataFromControls(controlsState);
 
+  const formData = {};
   Object.keys(controlsState).forEach(controlName => {
     if (inputFormData[controlName] === undefined) {
-      formData[controlName] = controlsState[controlName].value;
+      formData[controlName] = controlFormData[controlName];
     } else {
       formData[controlName] = inputFormData[controlName];
     }
   });
 
+  // always use dynamically generated queryFields
+  formData.queryFields = controlFormData.queryFields;
   return formData;
 }
 
-const defaultControls = Object.assign({}, controls);
+const defaultControls = { ...controls };
 Object.keys(controls).forEach(f => {
   defaultControls[f].value = controls[f].default;
 });

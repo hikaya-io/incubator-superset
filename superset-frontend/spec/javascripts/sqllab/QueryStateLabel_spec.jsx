@@ -17,10 +17,10 @@
  * under the License.
  */
 import React from 'react';
-import { Label } from 'react-bootstrap';
 import { shallow } from 'enzyme';
 
-import QueryStateLabel from '../../../src/SqlLab/components/QueryStateLabel';
+import Label from 'src/components/Label';
+import QueryStateLabel from 'src/SqlLab/components/QueryStateLabel';
 
 describe('SavedQuery', () => {
   const mockedProps = {
@@ -35,6 +35,6 @@ describe('SavedQuery', () => {
   });
   it('has an Overlay and a Popover', () => {
     const wrapper = shallow(<QueryStateLabel {...mockedProps} />);
-    expect(wrapper.find(Label)).toHaveLength(1);
+    expect(wrapper.find(Label)).toExist();
   });
 });

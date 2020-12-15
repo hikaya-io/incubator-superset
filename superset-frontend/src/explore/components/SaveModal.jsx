@@ -20,12 +20,13 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import { connect } from 'react-redux';
-import { Modal, Alert, Button, Radio } from 'react-bootstrap';
-import Select from 'react-select';
-import { t } from '@superset-ui/translation';
-
-import { supersetURL } from '../../utils/common';
-import { EXPLORE_ONLY_VIZ_TYPE } from '../constants';
+import { Alert, FormControl, FormGroup, Radio } from 'react-bootstrap';
+import { t } from '@superset-ui/core';
+import ReactMarkdown from 'react-markdown';
+import Modal from 'src/common/components/Modal';
+import Button from 'src/components/Button';
+import FormLabel from 'src/components/FormLabel';
+import { CreatableSelect } from 'src/components/Select/SupersetStyledSelect';
 
 const propTypes = {
   can_overwrite: PropTypes.bool,
@@ -39,28 +40,29 @@ const propTypes = {
   datasource: PropTypes.object,
 };
 
+// Session storage key for recent dashboard
+const SK_DASHBOARD_ID = 'save_chart_recent_dashboard';
+const SELECT_PLACEHOLDER = t('**Select** a dashboard OR **create** a new one');
+
 class SaveModal extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
       saveToDashboardId: null,
-      newDashboardName: '',
-      newSliceName: '',
-      dashboards: [],
+      newSliceName: props.sliceName,
       alert: null,
       action: props.can_overwrite ? 'overwrite' : 'saveas',
-      addToDash: 'noSave',
-      vizType: props.form_data.viz_type,
     };
+    this.onDashboardSelectChange = this.onDashboardSelectChange.bind(this);
+    this.onSliceNameChange = this.onSliceNameChange.bind(this);
   }
+
   componentDidMount() {
     this.props.actions.fetchDashboards(this.props.userId).then(() => {
       const dashboardIds = this.props.dashboards.map(
         dashboard => dashboard.value,
       );
-      let recentDashboard = sessionStorage.getItem(
-        'save_chart_recent_dashboard',
-      );
+      let recentDashboard = sessionStorage.getItem(SK_DASHBOARD_ID);
       recentDashboard = recentDashboard && parseInt(recentDashboard, 10);
       if (
         recentDashboard !== null &&
@@ -68,216 +70,175 @@ class SaveModal extends React.Component {
       ) {
         this.setState({
           saveToDashboardId: recentDashboard,
-          addToDash: 'existing',
         });
       }
     });
   }
-  onChange(name, event) {
-    switch (name) {
-      case 'newSliceName':
-        this.setState({ newSliceName: event.target.value });
-        break;
-      case 'saveToDashboardId':
-        this.setState({ saveToDashboardId: event.value });
-        this.changeDash('existing');
-        break;
-      case 'newDashboardName':
-        this.setState({ newDashboardName: event.target.value });
-        break;
-      default:
-        break;
-    }
+
+  onSliceNameChange(event) {
+    this.setState({ newSliceName: event.target.value });
   }
+
+  onDashboardSelectChange(event) {
+    const newDashboardName = event ? event.label : null;
+    const saveToDashboardId =
+      event && typeof event.value === 'number' ? event.value : null;
+    this.setState({ saveToDashboardId, newDashboardName });
+  }
+
   changeAction(action) {
     this.setState({ action });
   }
-  changeDash(dash) {
-    this.setState({ addToDash: dash });
-  }
+
   saveOrOverwrite(gotodash) {
     this.setState({ alert: null });
     this.props.actions.removeSaveModalAlert();
     const sliceParams = {};
 
-    let sliceName = null;
-    sliceParams.action = this.state.action;
     if (this.props.slice && this.props.slice.slice_id) {
       sliceParams.slice_id = this.props.slice.slice_id;
     }
     if (sliceParams.action === 'saveas') {
-      sliceName = this.state.newSliceName;
-      if (sliceName === '') {
+      if (this.state.newSliceName === '') {
         this.setState({ alert: t('Please enter a chart name') });
         return;
       }
-      sliceParams.slice_name = sliceName;
-    } else {
-      sliceParams.slice_name = this.props.slice.slice_name;
     }
-
-    const addToDash = this.state.addToDash;
-    sliceParams.add_to_dash = addToDash;
-    let dashboard = null;
-    switch (addToDash) {
-      case 'existing':
-        dashboard = this.state.saveToDashboardId;
-        if (!dashboard) {
-          this.setState({ alert: t('Please select a dashboard') });
-          return;
-        }
-        sliceParams.save_to_dashboard_id = dashboard;
-        break;
-      case 'new':
-        dashboard = this.state.newDashboardName;
-        if (dashboard === '') {
-          this.setState({ alert: t('Please enter a dashboard name') });
-          return;
-        }
-        sliceParams.new_dashboard_name = dashboard;
-        break;
-      default:
-        dashboard = null;
-    }
-    sliceParams.goto_dash = gotodash;
+    sliceParams.action = this.state.action;
+    sliceParams.slice_name = this.state.newSliceName;
+    sliceParams.save_to_dashboard_id = this.state.saveToDashboardId;
+    sliceParams.new_dashboard_name = this.state.newDashboardName;
 
     this.props.actions
       .saveSlice(this.props.form_data, sliceParams)
       .then(({ data }) => {
         if (data.dashboard_id === null) {
-          sessionStorage.removeItem('save_chart_recent_dashboard');
+          sessionStorage.removeItem(SK_DASHBOARD_ID);
         } else {
-          sessionStorage.setItem(
-            'save_chart_recent_dashboard',
-            data.dashboard_id,
-          );
+          sessionStorage.setItem(SK_DASHBOARD_ID, data.dashboard_id);
         }
         // Go to new slice url or dashboard url
-        if (gotodash) {
-          window.location.assign(supersetURL(data.dashboard));
-        } else {
-          window.location.assign(data.slice.slice_url);
-        }
+        const url = gotodash ? data.dashboard_url : data.slice.slice_url;
+        window.location.assign(url);
       });
     this.props.onHide();
   }
+
   removeAlert() {
     if (this.props.alert) {
       this.props.actions.removeSaveModalAlert();
     }
     this.setState({ alert: null });
   }
+
   render() {
-    const canNotSaveToDash =
-      EXPLORE_ONLY_VIZ_TYPE.indexOf(this.state.vizType) > -1;
     return (
-      <Modal show onHide={this.props.onHide} bsStyle="large">
-        <Modal.Header closeButton>
-          <Modal.Title>{t('Save A Chart')}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
+      <Modal
+        show
+        onHide={this.props.onHide}
+        title={t('Save Chart')}
+        footer={
+          <div data-test="save-modal-footer">
+            <Button id="btn_cancel" buttonSize="sm" onClick={this.props.onHide}>
+              {t('Cancel')}
+            </Button>
+            <Button
+              id="btn_modal_save_goto_dash"
+              buttonSize="sm"
+              disabled={
+                !this.state.newSliceName || !this.state.newDashboardName
+              }
+              onClick={this.saveOrOverwrite.bind(this, true)}
+            >
+              {t('Save & go to dashboard')}
+            </Button>
+            <Button
+              id="btn_modal_save"
+              buttonSize="sm"
+              buttonStyle="primary"
+              onClick={this.saveOrOverwrite.bind(this, false)}
+              disabled={!this.state.newSliceName}
+              data-test="btn-modal-save"
+            >
+              {!this.props.can_overwrite && this.props.slice
+                ? t('Save as new chart')
+                : t('Save')}
+            </Button>
+          </div>
+        }
+      >
+        <div data-test="save-modal-body">
           {(this.state.alert || this.props.alert) && (
             <Alert>
               {this.state.alert ? this.state.alert : this.props.alert}
               <i
+                role="button"
+                aria-label="Remove alert"
+                tabIndex={0}
                 className="fa fa-close pull-right"
                 onClick={this.removeAlert.bind(this)}
                 style={{ cursor: 'pointer' }}
               />
             </Alert>
           )}
-          {this.props.slice && (
+          <FormGroup data-test="radio-group">
             <Radio
               id="overwrite-radio"
-              disabled={!this.props.can_overwrite}
+              inline
+              disabled={!(this.props.can_overwrite && this.props.slice)}
               checked={this.state.action === 'overwrite'}
               onChange={this.changeAction.bind(this, 'overwrite')}
+              data-test="save-overwrite-radio"
             >
-              {t('Overwrite chart %s', this.props.slice.slice_name)}
+              {t('Save (Overwrite)')}
             </Radio>
-          )}
-
-          <Radio
-            id="saveas-radio"
-            inline
-            checked={this.state.action === 'saveas'}
-            onChange={this.changeAction.bind(this, 'saveas')}
-          >
-            {' '}
-            {t('Save as')} &nbsp;
-          </Radio>
-          <input
-            name="new_slice_name"
-            placeholder={t('[chart name]')}
-            onChange={this.onChange.bind(this, 'newSliceName')}
-            onFocus={this.changeAction.bind(this, 'saveas')}
-          />
-
-          <br />
+            <Radio
+              id="saveas-radio"
+              data-test="saveas-radio"
+              inline
+              checked={this.state.action === 'saveas'}
+              onChange={this.changeAction.bind(this, 'saveas')}
+            >
+              {' '}
+              {t('Save as ...')} &nbsp;
+            </Radio>
+          </FormGroup>
           <hr />
-
-          <Radio
-            checked={this.state.addToDash === 'noSave'}
-            onChange={this.changeDash.bind(this, 'noSave')}
-          >
-            {t('Do not add to a dashboard')}
-          </Radio>
-
-          <Radio
-            inline
-            disabled={canNotSaveToDash}
-            checked={this.state.addToDash === 'existing'}
-            onChange={this.changeDash.bind(this, 'existing')}
-            data-test="add-to-existing-dashboard"
-          >
-            {t('Add chart to existing dashboard')}
-          </Radio>
-          <Select
-            className="save-modal-selector"
-            disabled={canNotSaveToDash}
-            options={this.props.dashboards}
-            onChange={this.onChange.bind(this, 'saveToDashboardId')}
-            autoSize={false}
-            value={this.state.saveToDashboardId}
-            placeholder="Select Dashboard"
-          />
-
-          <Radio
-            inline
-            checked={this.state.addToDash === 'new'}
-            onChange={this.changeDash.bind(this, 'new')}
-            disabled={canNotSaveToDash}
-            data-test="add-to-new-dashboard"
-          >
-            {t('Add to new dashboard')} &nbsp;
-          </Radio>
-          <input
-            onChange={this.onChange.bind(this, 'newDashboardName')}
-            disabled={canNotSaveToDash}
-            onFocus={this.changeDash.bind(this, 'new')}
-            placeholder={t('[dashboard name]')}
-          />
-        </Modal.Body>
-
-        <Modal.Footer>
-          <Button
-            type="button"
-            id="btn_modal_save"
-            className="btn pull-left"
-            onClick={this.saveOrOverwrite.bind(this, false)}
-          >
-            {t('Save')}
-          </Button>
-          <Button
-            type="button"
-            id="btn_modal_save_goto_dash"
-            className="btn btn-primary pull-left gotodash"
-            disabled={this.state.addToDash === 'noSave' || canNotSaveToDash}
-            onClick={this.saveOrOverwrite.bind(this, true)}
-          >
-            {t('Save & go to dashboard')}
-          </Button>
-        </Modal.Footer>
+          <FormGroup>
+            <FormLabel required>{t('Chart name')}</FormLabel>
+            <FormControl
+              name="new_slice_name"
+              type="text"
+              bsSize="sm"
+              placeholder="Name"
+              value={this.state.newSliceName}
+              onChange={this.onSliceNameChange}
+              data-test="new-chart-name"
+            />
+          </FormGroup>
+          <FormGroup data-test="save-chart-modal-select-dashboard-form">
+            <FormLabel>{t('Add to dashboard')}</FormLabel>
+            <CreatableSelect
+              id="dashboard-creatable-select"
+              className="save-modal-selector"
+              options={this.props.dashboards}
+              clearable
+              creatable
+              onChange={this.onDashboardSelectChange}
+              autoSize={false}
+              value={
+                this.state.saveToDashboardId || this.state.newDashboardName
+              }
+              placeholder={
+                // Using markdown to allow for good i18n
+                <ReactMarkdown
+                  source={SELECT_PLACEHOLDER}
+                  renderers={{ paragraph: 'span' }}
+                />
+              }
+            />
+          </FormGroup>
+        </div>
       </Modal>
     );
   }
@@ -296,5 +257,4 @@ function mapStateToProps({ explore, saveModal }) {
   };
 }
 
-export { SaveModal };
 export default connect(mapStateToProps, () => ({}))(SaveModal);

@@ -27,10 +27,10 @@ import {
   SET_UNSAVED_CHANGES,
   TOGGLE_EXPAND_SLICE,
   TOGGLE_FAVE_STAR,
-} from '../../../../src/dashboard/actions/dashboardState';
+  UNSET_FOCUSED_FILTER_FIELD,
+} from 'src/dashboard/actions/dashboardState';
 
-import dashboardStateReducer from '../../../../src/dashboard/reducers/dashboardState';
-import { BUILDER_PANE_TYPE } from '../../../../src/dashboard/util/constants';
+import dashboardStateReducer from 'src/dashboard/reducers/dashboardState';
 
 describe('dashboardState reducer', () => {
   it('should return initial state', () => {
@@ -72,7 +72,6 @@ describe('dashboardState reducer', () => {
       ),
     ).toEqual({
       editMode: true,
-      builderPaneType: BUILDER_PANE_TYPE.ADD_COMPONENTS,
     });
   });
 
@@ -122,32 +121,62 @@ describe('dashboardState reducer', () => {
   });
 
   it('should set unsaved changes, max undo history, and editMode to false on save', () => {
-    expect(
-      dashboardStateReducer({ hasUnsavedChanges: true }, { type: ON_SAVE }),
-    ).toEqual({
-      hasUnsavedChanges: false,
-      maxUndoHistoryExceeded: false,
-      editMode: false,
-      builderPaneType: BUILDER_PANE_TYPE.NONE,
-      updatedColorScheme: false,
-    });
+    const result = dashboardStateReducer(
+      { hasUnsavedChanges: true },
+      { type: ON_SAVE },
+    );
+    expect(result.hasUnsavedChanges).toBe(false);
+    expect(result.maxUndoHistoryExceeded).toBe(false);
+    expect(result.editMode).toBe(false);
+    expect(result.updatedColorScheme).toBe(false);
   });
 
-  it('should clear focused filter field', () => {
+  it('should reset lastModifiedTime on save', () => {
+    const initTime = new Date().getTime() / 1000;
+    dashboardStateReducer(
+      {
+        lastModifiedTime: initTime,
+      },
+      {},
+    );
+
+    const lastModifiedTime = new Date().getTime() / 1000;
+    expect(
+      dashboardStateReducer(
+        { hasUnsavedChanges: true },
+        { type: ON_SAVE, lastModifiedTime },
+      ).lastModifiedTime,
+    ).toBeGreaterThanOrEqual(initTime);
+  });
+
+  it('should clear the focused filter field', () => {
+    const initState = {
+      focusedFilterField: {
+        chartId: 1,
+        column: 'column_1',
+      },
+    };
+
+    const cleared = dashboardStateReducer(initState, {
+      type: UNSET_FOCUSED_FILTER_FIELD,
+      chartId: 1,
+      column: 'column_1',
+    });
+
+    expect(cleared.focusedFilterField).toBeNull();
+  });
+
+  it('should only clear focused filter when the fields match', () => {
     // dashboard only has 1 focused filter field at a time,
     // but when user switch different filter boxes,
     // browser didn't always fire onBlur and onFocus events in order.
-    // so in redux state focusedFilterField prop is a queue,
-    // we always shift first element in the queue
 
     // init state: has 1 focus field
     const initState = {
-      focusedFilterField: [
-        {
-          chartId: 1,
-          column: 'column_1',
-        },
-      ],
+      focusedFilterField: {
+        chartId: 1,
+        column: 'column_1',
+      },
     };
     // when user switching filter,
     // browser focus on new filter first,
@@ -158,10 +187,12 @@ describe('dashboardState reducer', () => {
       column: 'column_2',
     });
     const step2 = dashboardStateReducer(step1, {
-      type: SET_FOCUSED_FILTER_FIELD,
+      type: UNSET_FOCUSED_FILTER_FIELD,
+      chartId: 1,
+      column: 'column_1',
     });
 
-    expect(step2.focusedFilterField.slice(-1).pop()).toEqual({
+    expect(step2.focusedFilterField).toEqual({
       chartId: 2,
       column: 'column_2',
     });

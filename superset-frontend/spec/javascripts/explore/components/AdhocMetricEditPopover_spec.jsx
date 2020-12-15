@@ -20,13 +20,12 @@
 import React from 'react';
 import sinon from 'sinon';
 import { shallow } from 'enzyme';
-import { Button, FormGroup, Popover } from 'react-bootstrap';
+import { FormGroup } from 'react-bootstrap';
+import Button from 'src/components/Button';
 
-import AdhocMetric, {
-  EXPRESSION_TYPES,
-} from '../../../../src/explore/AdhocMetric';
-import AdhocMetricEditPopover from '../../../../src/explore/components/AdhocMetricEditPopover';
-import { AGGREGATES } from '../../../../src/explore/constants';
+import AdhocMetric, { EXPRESSION_TYPES } from 'src/explore/AdhocMetric';
+import AdhocMetricEditPopover from 'src/explore/components/AdhocMetricEditPopover';
+import { AGGREGATES } from 'src/explore/constants';
 
 const columns = [
   { type: 'VARCHAR(255)', column_name: 'source' },
@@ -52,6 +51,7 @@ function setup(overrides) {
     adhocMetric: sumValueAdhocMetric,
     onChange,
     onClose,
+    onResize: () => {},
     columns,
     ...overrides,
   };
@@ -62,7 +62,6 @@ function setup(overrides) {
 describe('AdhocMetricEditPopover', () => {
   it('renders a popover with edit metric form contents', () => {
     const { wrapper } = setup();
-    expect(wrapper.find(Popover)).toHaveLength(1);
     expect(wrapper.find(FormGroup)).toHaveLength(3);
     expect(wrapper.find(Button)).toHaveLength(2);
   });
@@ -77,7 +76,7 @@ describe('AdhocMetricEditPopover', () => {
 
   it('overwrites the adhocMetric in state with onAggregateChange', () => {
     const { wrapper } = setup();
-    wrapper.instance().onAggregateChange({ aggregate: AGGREGATES.AVG });
+    wrapper.instance().onAggregateChange(AGGREGATES.AVG);
     expect(wrapper.state('adhocMetric')).toEqual(
       sumValueAdhocMetric.duplicateWith({ aggregate: AGGREGATES.AVG }),
     );
@@ -91,37 +90,22 @@ describe('AdhocMetricEditPopover', () => {
     );
   });
 
-  it('overwrites the adhocMetric in state with onLabelChange', () => {
-    const { wrapper } = setup();
-    wrapper.instance().onLabelChange({ target: { value: 'new label' } });
-    expect(wrapper.state('adhocMetric').label).toBe('new label');
-    expect(wrapper.state('adhocMetric').hasCustomLabel).toBe(true);
-  });
-
-  it('returns to default labels when the custom label is cleared', () => {
-    const { wrapper } = setup();
-    wrapper.instance().onLabelChange({ target: { value: 'new label' } });
-    wrapper.instance().onLabelChange({ target: { value: '' } });
-    expect(wrapper.state('adhocMetric').label).toBe('SUM(value)');
-    expect(wrapper.state('adhocMetric').hasCustomLabel).toBe(false);
-  });
-
   it('prevents saving if no column or aggregate is chosen', () => {
     const { wrapper } = setup();
-    expect(wrapper.find(Button).find({ disabled: true })).toHaveLength(0);
+    expect(wrapper.find(Button).find({ disabled: true })).not.toExist();
     wrapper.instance().onColumnChange(null);
-    expect(wrapper.find(Button).find({ disabled: true })).toHaveLength(1);
+    expect(wrapper.find(Button).find({ disabled: true })).toExist();
     wrapper.instance().onColumnChange({ column: columns[0] });
-    expect(wrapper.find(Button).find({ disabled: true })).toHaveLength(0);
+    expect(wrapper.find(Button).find({ disabled: true })).not.toExist();
     wrapper.instance().onAggregateChange(null);
-    expect(wrapper.find(Button).find({ disabled: true })).toHaveLength(1);
+    expect(wrapper.find(Button).find({ disabled: true })).toExist();
   });
 
   it('highlights save if changes are present', () => {
     const { wrapper } = setup();
-    expect(wrapper.find(Button).find({ bsStyle: 'primary' })).toHaveLength(0);
+    expect(wrapper.find(Button).find({ buttonStyle: 'primary' })).not.toExist();
     wrapper.instance().onColumnChange({ column: columns[1] });
-    expect(wrapper.find(Button).find({ bsStyle: 'primary' })).toHaveLength(1);
+    expect(wrapper.find(Button).find({ buttonStyle: 'primary' })).toExist();
   });
 
   it('will initiate a drag when clicked', () => {
@@ -129,9 +113,9 @@ describe('AdhocMetricEditPopover', () => {
     wrapper.instance().onDragDown = sinon.spy();
     wrapper.instance().forceUpdate();
 
-    expect(wrapper.find('i.glyphicon-resize-full')).toHaveLength(1);
+    expect(wrapper.find('.fa-expand')).toExist();
     expect(wrapper.instance().onDragDown.calledOnce).toBe(false);
-    wrapper.find('i.glyphicon-resize-full').simulate('mouseDown');
+    wrapper.find('.fa-expand').simulate('mouseDown');
     expect(wrapper.instance().onDragDown.calledOnce).toBe(true);
   });
 });

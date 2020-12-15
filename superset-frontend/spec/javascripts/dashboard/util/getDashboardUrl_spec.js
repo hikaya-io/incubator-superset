@@ -16,8 +16,8 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import getDashboardUrl from '../../../../src/dashboard/util/getDashboardUrl';
-import { DASHBOARD_FILTER_SCOPE_GLOBAL } from '../../../../src/dashboard/reducers/dashboardFilters';
+import getDashboardUrl from 'src/dashboard/util/getDashboardUrl';
+import { DASHBOARD_FILTER_SCOPE_GLOBAL } from 'src/dashboard/reducers/dashboardFilters';
 
 describe('getChartIdsFromLayout', () => {
   it('should encode filters', () => {
@@ -30,6 +30,16 @@ describe('getChartIdsFromLayout', () => {
     const url = getDashboardUrl('path', filters);
     expect(url).toBe(
       'path?preselect_filters=%7B%2235%22%3A%7B%22key%22%3A%5B%22value%22%5D%7D%7D',
+    );
+
+    const urlWithHash = getDashboardUrl('path', filters, 'iamhashtag');
+    expect(urlWithHash).toBe(
+      'path?preselect_filters=%7B%2235%22%3A%7B%22key%22%3A%5B%22value%22%5D%7D%7D#iamhashtag',
+    );
+
+    const urlWithStandalone = getDashboardUrl('path', filters, '', true);
+    expect(urlWithStandalone).toBe(
+      'path?preselect_filters=%7B%2235%22%3A%7B%22key%22%3A%5B%22value%22%5D%7D%7D&standalone=true',
     );
   });
 });

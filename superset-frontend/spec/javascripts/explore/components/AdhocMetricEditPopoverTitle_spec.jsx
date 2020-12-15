@@ -20,27 +20,19 @@
 import React from 'react';
 import sinon from 'sinon';
 import { shallow } from 'enzyme';
-import { OverlayTrigger } from 'react-bootstrap';
+import { Tooltip } from 'src/common/components/Tooltip';
 
-import AdhocMetric from '../../../../src/explore/AdhocMetric';
-import AdhocMetricEditPopoverTitle from '../../../../src/explore/components/AdhocMetricEditPopoverTitle';
-import { AGGREGATES } from '../../../../src/explore/constants';
+import AdhocMetricEditPopoverTitle from 'src/explore/components/AdhocMetricEditPopoverTitle';
 
-const columns = [
-  { type: 'VARCHAR(255)', column_name: 'source' },
-  { type: 'VARCHAR(255)', column_name: 'target' },
-  { type: 'DOUBLE', column_name: 'value' },
-];
-
-const sumValueAdhocMetric = new AdhocMetric({
-  column: columns[2],
-  aggregate: AGGREGATES.SUM,
-});
+const title = {
+  label: 'Title',
+  hasCustomLabel: false,
+};
 
 function setup(overrides) {
   const onChange = sinon.spy();
   const props = {
-    adhocMetric: sumValueAdhocMetric,
+    title,
     onChange,
     ...overrides,
   };
@@ -51,19 +43,18 @@ function setup(overrides) {
 describe('AdhocMetricEditPopoverTitle', () => {
   it('renders an OverlayTrigger wrapper with the title', () => {
     const { wrapper } = setup();
-    expect(wrapper.find(OverlayTrigger)).toHaveLength(1);
+    expect(wrapper.find(Tooltip)).toExist();
     expect(
-      wrapper
-        .find(OverlayTrigger)
-        .find('span')
-        .text(),
+      wrapper.find('[data-test="AdhocMetricEditTitle#trigger"]').text(),
     ).toBe('My Metric\xa0');
   });
 
   it('transfers to edit mode when clicked', () => {
     const { wrapper } = setup();
     expect(wrapper.state('isEditable')).toBe(false);
-    wrapper.simulate('click');
+    wrapper
+      .find('[data-test="AdhocMetricEditTitle#trigger"]')
+      .simulate('click');
     expect(wrapper.state('isEditable')).toBe(true);
   });
 });

@@ -18,10 +18,9 @@
  */
 import React from 'react';
 import { shallow } from 'enzyme';
-import sinon from 'sinon';
 
-import AnchorLink from '../../../src/components/AnchorLink';
-import URLShortLinkButton from '../../../src/components/URLShortLinkButton';
+import AnchorLink from 'src/components/AnchorLink';
+import URLShortLinkButton from 'src/components/URLShortLinkButton';
 
 describe('AnchorLink', () => {
   const props = {
@@ -32,7 +31,7 @@ describe('AnchorLink', () => {
     global.window = Object.create(window);
     Object.defineProperty(window, 'location', {
       value: {
-        hash: '#' + props.anchorLinkId,
+        hash: `#${props.anchorLinkId}`,
       },
     });
   });
@@ -41,29 +40,28 @@ describe('AnchorLink', () => {
     delete global.window.location.value;
   });
 
-  it('should scroll the AnchorLink into view upon mount', () => {
-    const callback = sinon.spy();
-    const clock = sinon.useFakeTimers();
-    const stub = sinon.stub(document, 'getElementById').returns({
+  it('should scroll the AnchorLink into view upon mount', async () => {
+    const callback = jest.fn();
+    const stub = jest.spyOn(document, 'getElementById').mockReturnValue({
       scrollIntoView: callback,
     });
 
     shallow(<AnchorLink {...props} />);
-    clock.tick(2000);
-    expect(callback.callCount).toEqual(1);
-    stub.restore();
+    await new Promise(r => setTimeout(r, 2000));
+
+    expect(stub).toHaveBeenCalledTimes(1);
   });
 
   it('should render anchor link with id', () => {
     const wrapper = shallow(<AnchorLink {...props} />);
-    expect(wrapper.find(`#${props.anchorLinkId}`)).toHaveLength(1);
-    expect(wrapper.find(URLShortLinkButton)).toHaveLength(0);
+    expect(wrapper.find(`#${props.anchorLinkId}`)).toExist();
+    expect(wrapper.find(URLShortLinkButton)).not.toExist();
   });
 
   it('should render URLShortLinkButton', () => {
     const wrapper = shallow(<AnchorLink {...props} showShortLinkButton />);
-    expect(wrapper.find(URLShortLinkButton)).toHaveLength(1);
-    expect(wrapper.find(URLShortLinkButton).prop('placement')).toBe('right');
+    expect(wrapper.find(URLShortLinkButton)).toExist();
+    expect(wrapper.find(URLShortLinkButton)).toHaveProp({ placement: 'right' });
 
     const targetUrl = wrapper.find(URLShortLinkButton).prop('url');
     const hash = targetUrl.slice(targetUrl.indexOf('#') + 1);

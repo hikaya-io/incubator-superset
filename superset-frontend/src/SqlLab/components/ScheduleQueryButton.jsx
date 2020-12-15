@@ -21,10 +21,12 @@ import PropTypes from 'prop-types';
 import Form from 'react-jsonschema-form';
 import chrono from 'chrono-node';
 import { Col, FormControl, FormGroup, Row } from 'react-bootstrap';
-import { t } from '@superset-ui/translation';
+import { t, styled } from '@superset-ui/core';
 
-import Button from '../../components/Button';
-import ModalTrigger from '../../components/ModalTrigger';
+import Button from 'src/components/Button';
+import ModalTrigger from 'src/components/ModalTrigger';
+import FormLabel from 'src/components/FormLabel';
+import './ScheduleQueryButton.less';
 
 const validators = {
   greater: (a, b) => a > b,
@@ -90,6 +92,10 @@ const defaultProps = {
   tooltip: null,
 };
 
+const StyledRow = styled(Row)`
+  padding-bottom: ${({ theme }) => theme.gridUnit * 2}px;
+`;
+
 class ScheduleQueryButton extends React.PureComponent {
   constructor(props) {
     super(props);
@@ -104,6 +110,7 @@ class ScheduleQueryButton extends React.PureComponent {
     this.onLabelChange = this.onLabelChange.bind(this);
     this.onDescriptionChange = this.onDescriptionChange.bind(this);
   }
+
   onSchedule({ formData }) {
     const query = {
       label: this.state.label,
@@ -116,26 +123,31 @@ class ScheduleQueryButton extends React.PureComponent {
     this.props.onSchedule(query);
     this.saveModal.close();
   }
+
   onCancel() {
     this.saveModal.close();
   }
+
   onLabelChange(e) {
     this.setState({ label: e.target.value });
   }
+
   onDescriptionChange(e) {
     this.setState({ description: e.target.value });
   }
+
   toggleSchedule() {
-    this.setState({ showSchedule: !this.state.showSchedule });
+    this.setState(prevState => ({ showSchedule: !prevState.showSchedule }));
   }
+
   renderModalBody() {
     return (
       <FormGroup>
-        <Row style={{ paddingBottom: '10px' }}>
+        <StyledRow>
           <Col md={12}>
-            <label className="control-label" htmlFor="embed-height">
+            <FormLabel className="control-label" htmlFor="embed-height">
               {t('Label')}
-            </label>
+            </FormLabel>
             <FormControl
               type="text"
               placeholder={t('Label for your query')}
@@ -143,12 +155,12 @@ class ScheduleQueryButton extends React.PureComponent {
               onChange={this.onLabelChange}
             />
           </Col>
-        </Row>
-        <Row style={{ paddingBottom: '10px' }}>
+        </StyledRow>
+        <StyledRow>
           <Col md={12}>
-            <label className="control-label" htmlFor="embed-height">
+            <FormLabel className="control-label" htmlFor="embed-height">
               {t('Description')}
-            </label>
+            </FormLabel>
             <FormControl
               componentClass="textarea"
               placeholder={t('Write a description for your query')}
@@ -156,15 +168,17 @@ class ScheduleQueryButton extends React.PureComponent {
               onChange={this.onDescriptionChange}
             />
           </Col>
-        </Row>
+        </StyledRow>
         <Row>
           <Col md={12}>
-            <Form
-              schema={getJSONSchema()}
-              uiSchema={getUISchema()}
-              onSubmit={this.onSchedule}
-              validate={getValidator()}
-            />
+            <div className="json-schema">
+              <Form
+                schema={getJSONSchema()}
+                uiSchema={getUISchema()}
+                onSubmit={this.onSchedule}
+                validate={getValidator()}
+              />
+            </div>
           </Col>
         </Row>
         {this.props.scheduleQueryWarning && (
@@ -177,6 +191,7 @@ class ScheduleQueryButton extends React.PureComponent {
       </FormGroup>
     );
   }
+
   render() {
     return (
       <span className="ScheduleQueryButton">
@@ -188,16 +203,14 @@ class ScheduleQueryButton extends React.PureComponent {
           modalBody={this.renderModalBody()}
           triggerNode={
             <Button
-              bsSize="small"
-              className="toggleSchedule"
+              buttonSize="small"
               onClick={this.toggleSchedule}
               disabled={this.props.disabled}
               tooltip={this.props.tooltip}
             >
-              <i className="fa fa-calendar" /> {t('Schedule Query')}
+              <i className="fa fa-calendar" /> {t('Schedule')}
             </Button>
           }
-          bsSize="medium"
         />
       </span>
     );

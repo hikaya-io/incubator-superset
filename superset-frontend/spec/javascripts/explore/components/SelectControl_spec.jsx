@@ -18,13 +18,12 @@
  */
 /* eslint-disable no-unused-expressions */
 import React from 'react';
-import Select, { Creatable } from 'react-select';
-import VirtualizedSelect from 'react-virtualized-select';
 import sinon from 'sinon';
 import { shallow } from 'enzyme';
-import OnPasteSelect from '../../../../src/components/OnPasteSelect';
-import VirtualizedRendererWrap from '../../../../src/components/VirtualizedRendererWrap';
-import SelectControl from '../../../../src/explore/components/controls/SelectControl';
+import { Select, CreatableSelect } from 'src/components/Select';
+import OnPasteSelect from 'src/components/Select/OnPasteSelect';
+import SelectControl from 'src/explore/components/controls/SelectControl';
+import { styledMount as mount } from 'spec/helpers/theming';
 
 const defaultProps = {
   choices: [
@@ -47,16 +46,23 @@ describe('SelectControl', () => {
 
   beforeEach(() => {
     wrapper = shallow(<SelectControl {...defaultProps} />);
-    wrapper.setProps(defaultProps);
   });
 
-  it('renders an OnPasteSelect', () => {
-    expect(wrapper.find(OnPasteSelect)).toHaveLength(1);
-  });
-
-  it('calls onChange when toggled', () => {
+  it('uses Select in onPasteSelect when freeForm=false', () => {
+    wrapper = shallow(<SelectControl {...defaultProps} multi />);
     const select = wrapper.find(OnPasteSelect);
-    select.simulate('change', { value: 50 });
+    expect(select.props().selectWrap).toBe(Select);
+  });
+
+  it('uses Creatable in onPasteSelect when freeForm=true', () => {
+    wrapper = shallow(<SelectControl {...defaultProps} multi freeForm />);
+    const select = wrapper.find(OnPasteSelect);
+    expect(select.props().selectWrap).toBe(CreatableSelect);
+  });
+
+  it('calls props.onChange when select', () => {
+    const select = wrapper.instance();
+    select.onChange({ value: 50 });
     expect(defaultProps.onChange.calledWith(50)).toBe(true);
   });
 
@@ -72,34 +78,143 @@ describe('SelectControl', () => {
       onChange: sinon.spy(),
     };
     wrapper.setProps(selectAllProps);
-    const select = wrapper.find(OnPasteSelect);
-    select.simulate('change', [{ meta: true, value: 'Select All' }]);
+    wrapper.instance().onChange([{ meta: true, value: 'Select All' }]);
     expect(selectAllProps.onChange.calledWith(expectedValues)).toBe(true);
   });
 
-  it('passes VirtualizedSelect as selectWrap', () => {
-    const select = wrapper.find(OnPasteSelect);
-    expect(select.props().selectWrap).toBe(VirtualizedSelect);
+  describe('render', () => {
+    it('renders with Select by default', () => {
+      expect(wrapper.find(OnPasteSelect)).not.toExist();
+      expect(wrapper.findWhere(x => x.type() === Select)).toHaveLength(1);
+    });
+
+    it('renders with OnPasteSelect when multi', () => {
+      wrapper.setProps({ multi: true });
+      expect(wrapper.find(OnPasteSelect)).toExist();
+      expect(wrapper.findWhere(x => x.type() === Select)).toHaveLength(0);
+    });
+
+    it('renders with Creatable when freeForm', () => {
+      wrapper.setProps({ freeForm: true });
+      expect(wrapper.find(OnPasteSelect)).not.toExist();
+      expect(wrapper.findWhere(x => x.type() === CreatableSelect)).toHaveLength(
+        1,
+      );
+    });
+    describe('empty placeholder', () => {
+      describe('withMulti', () => {
+        it('does not show a placeholder if there are no choices', () => {
+          const withMulti = mount(
+            <SelectControl
+              {...defaultProps}
+              choices={[]}
+              multi
+              placeholder="add something"
+            />,
+          );
+          expect(withMulti.html()).not.toContain('placeholder=');
+        });
+      });
+      describe('withSingleChoice', () => {
+        it('does not show a placeholder if there are no choices', () => {
+          const singleChoice = mount(
+            <SelectControl
+              {...defaultProps}
+              choices={[]}
+              multi
+              placeholder="add something"
+            />,
+          );
+          expect(singleChoice.html()).not.toContain('placeholder=');
+        });
+      });
+      describe('default placeholder', () => {
+        it('does not show a placeholder if there are no options', () => {
+          const defaultPlaceholder = mount(
+            <SelectControl {...defaultProps} choices={[]} multi />,
+          );
+          expect(defaultPlaceholder.html()).not.toContain('placeholder=');
+        });
+      });
+      describe('all choices selected', () => {
+        it('does not show a placeholder', () => {
+          const allChoicesSelected = mount(
+            <SelectControl
+              {...defaultProps}
+              multi
+              value={['today', '1 year ago']}
+            />,
+          );
+          expect(allChoicesSelected.html()).toContain('placeholder=""');
+        });
+      });
+    });
+    describe('when select is multi', () => {
+      it('renders the placeholder when a selection has been made', () => {
+        wrapper = mount(
+          <SelectControl
+            {...defaultProps}
+            multi
+            value={50}
+            placeholder="add something"
+          />,
+        );
+        expect(wrapper.html()).toContain('add something');
+      });
+      it('shows numbers of options as a placeholder by default', () => {
+        wrapper = mount(<SelectControl {...defaultProps} multi />);
+        expect(wrapper.html()).toContain('2 option(s');
+      });
+      it('reduces the number of options in the placeholder by the value length', () => {
+        wrapper = mount(
+          <SelectControl {...defaultProps} multi value={['today']} />,
+        );
+        expect(wrapper.html()).toContain('1 option(s');
+      });
+    });
+    describe('when select is single', () => {
+      it('does not render the placeholder when a selection has been made', () => {
+        wrapper = mount(
+          <SelectControl
+            {...defaultProps}
+            value={50}
+            placeholder="add something"
+          />,
+        );
+        expect(wrapper.html()).not.toContain('add something');
+      });
+    });
   });
 
-  it('passes Creatable as selectComponent when freeForm=true', () => {
-    wrapper = shallow(<SelectControl {...defaultProps} freeForm />);
-    const select = wrapper.find(OnPasteSelect);
-    expect(select.props().selectComponent).toBe(Creatable);
-  });
-
-  it('passes Select as selectComponent when freeForm=false', () => {
-    const select = wrapper.find(OnPasteSelect);
-    expect(select.props().selectComponent).toBe(Select);
-  });
-
-  it('wraps optionRenderer in a VirtualizedRendererWrap', () => {
-    const select = wrapper.find(OnPasteSelect);
-    const defaultOptionRenderer = SelectControl.defaultProps.optionRenderer;
-    const wrappedRenderer = VirtualizedRendererWrap(defaultOptionRenderer);
-    expect(typeof select.props().optionRenderer).toBe('function');
-    // different instances of wrapper with same inner renderer are unequal
-    expect(select.props().optionRenderer.name).toBe(wrappedRenderer.name);
+  describe('optionsRemaining', () => {
+    describe('isMulti', () => {
+      it('returns the options minus selected values', () => {
+        const wrapper = mount(
+          <SelectControl {...defaultProps} multi value={['today']} />,
+        );
+        expect(wrapper.instance().optionsRemaining()).toEqual(1);
+      });
+    });
+    describe('is not multi', () => {
+      it('returns the length of all options', () => {
+        wrapper = mount(
+          <SelectControl
+            {...defaultProps}
+            value={50}
+            placeholder="add something"
+          />,
+        );
+        expect(wrapper.instance().optionsRemaining()).toEqual(2);
+      });
+    });
+    describe('with Select All', () => {
+      it('does not count it', () => {
+        const props = { ...defaultProps, multi: true, allowAll: true };
+        const wrapper = mount(<SelectControl {...props} />);
+        expect(wrapper.instance().getOptions(props).length).toEqual(3);
+        expect(wrapper.instance().optionsRemaining()).toEqual(2);
+      });
+    });
   });
 
   describe('getOptions', () => {
@@ -132,19 +247,22 @@ describe('SelectControl', () => {
         value: ['one', 'two'],
         name: 'row_limit',
         label: 'Row Limit',
-        valueKey: 'value',
+        valueKey: 'custom_value_key',
         onChange: sinon.spy(),
       };
-      const newOptions = [
-        { value: 'one', label: 'one' },
-        { value: 'two', label: 'two' },
+      // the last added option is at the top
+      const expectedNewOptions = [
+        { custom_value_key: 'two', label: 'two' },
+        { custom_value_key: 'one', label: 'one' },
       ];
       wrapper.setProps(freeFormProps);
-      expect(wrapper.instance().getOptions(freeFormProps)).toEqual(newOptions);
+      expect(wrapper.instance().getOptions(freeFormProps)).toEqual(
+        expectedNewOptions,
+      );
     });
   });
 
-  describe('componentWillReceiveProps', () => {
+  describe('UNSAFE_componentWillReceiveProps', () => {
     it('sets state.options if props.choices has changed', () => {
       const updatedOptions = [
         { value: 'three', label: 'three' },

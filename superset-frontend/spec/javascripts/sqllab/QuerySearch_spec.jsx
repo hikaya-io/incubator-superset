@@ -17,18 +17,19 @@
  * under the License.
  */
 import React from 'react';
-import Select from 'react-select';
-import { Button } from 'react-bootstrap';
+import Button from 'src/components/Button';
 import { shallow } from 'enzyme';
 import sinon from 'sinon';
 
-import QuerySearch from '../../../src/SqlLab/components/QuerySearch';
+import Select from 'src/components/Select';
+import QuerySearch from 'src/SqlLab/components/QuerySearch';
 
 describe('QuerySearch', () => {
   const search = sinon.spy(QuerySearch.prototype, 'refreshQueries');
   const mockedProps = {
     actions: {},
     height: 0,
+    displayLimit: 50,
   };
   it('is valid', () => {
     expect(React.isValidElement(<QuerySearch {...mockedProps} />)).toBe(true);
@@ -39,7 +40,7 @@ describe('QuerySearch', () => {
   });
 
   it('should have three Select', () => {
-    expect(wrapper.find(Select)).toHaveLength(3);
+    expect(wrapper.findWhere(x => x.type() === Select)).toHaveLength(3);
   });
 
   it('updates fromTime on user selects from time', () => {
@@ -60,7 +61,7 @@ describe('QuerySearch', () => {
   });
 
   it('should have one input for searchText', () => {
-    expect(wrapper.find('input')).toHaveLength(1);
+    expect(wrapper.find('input')).toExist();
   });
 
   it('updates search text on user inputs search text', () => {
@@ -69,7 +70,7 @@ describe('QuerySearch', () => {
   });
 
   it('refreshes queries when enter (only) is pressed on the input', () => {
-    const callCount = search.callCount;
+    const { callCount } = search;
     wrapper.find('input').simulate('keyDown', { keyCode: 'a'.charCodeAt(0) });
     expect(search.callCount).toBe(callCount);
     wrapper.find('input').simulate('keyDown', { keyCode: '\r'.charCodeAt(0) });
@@ -77,11 +78,11 @@ describe('QuerySearch', () => {
   });
 
   it('should have one Button', () => {
-    expect(wrapper.find(Button)).toHaveLength(1);
+    expect(wrapper.find(Button)).toExist();
   });
 
   it('refreshes queries when clicked', () => {
-    const callCount = search.callCount;
+    const { callCount } = search;
     wrapper.find(Button).simulate('click');
     expect(search.callCount).toBe(callCount + 1);
   });

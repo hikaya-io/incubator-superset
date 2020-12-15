@@ -18,19 +18,29 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
-import Select from 'react-select';
-import { t } from '@superset-ui/translation';
+import Select from 'src/components/Select';
+import { t, styled } from '@superset-ui/core';
+import { Alert } from 'react-bootstrap';
+import Button from 'src/components/Button';
 
-import ModalTrigger from '../../components/ModalTrigger';
+import ModalTrigger from 'src/components/ModalTrigger';
+import FormLabel from 'src/components/FormLabel';
 
 const propTypes = {
   triggerNode: PropTypes.node.isRequired,
   refreshFrequency: PropTypes.number.isRequired,
   onChange: PropTypes.func.isRequired,
   editMode: PropTypes.bool.isRequired,
+  refreshLimit: PropTypes.number,
+  refreshWarning: PropTypes.string,
 };
 
-const options = [
+const defaultProps = {
+  refreshLimit: 0,
+  refreshWarning: null,
+};
+
+export const options = [
   [0, t("Don't refresh")],
   [10, t('10 seconds')],
   [30, t('30 seconds')],
@@ -43,13 +53,32 @@ const options = [
   [86400, t('24 hours')],
 ].map(o => ({ value: o[0], label: o[1] }));
 
+const RefreshWarningContainer = styled.div`
+  margin-top: ${({ theme }) => theme.gridUnit * 6}px;
+`;
+
 class RefreshIntervalModal extends React.PureComponent {
   constructor(props) {
     super(props);
+    this.modalRef = React.createRef();
     this.state = {
       refreshFrequency: props.refreshFrequency,
     };
     this.handleFrequencyChange = this.handleFrequencyChange.bind(this);
+    this.onSave = this.onSave.bind(this);
+    this.onCancel = this.onCancel.bind(this);
+  }
+
+  onSave() {
+    this.props.onChange(this.state.refreshFrequency, this.props.editMode);
+    this.modalRef.current.close();
+  }
+
+  onCancel() {
+    this.setState({
+      refreshFrequency: this.props.refreshFrequency,
+    });
+    this.modalRef.current.close();
   }
 
   handleFrequencyChange(opt) {
@@ -57,29 +86,53 @@ class RefreshIntervalModal extends React.PureComponent {
     this.setState({
       refreshFrequency: value,
     });
-    this.props.onChange(value, this.props.editMode);
   }
 
   render() {
+    const { refreshLimit = 0, refreshWarning, editMode } = this.props;
+    const { refreshFrequency = 0 } = this.state;
+    const showRefreshWarning =
+      !!refreshFrequency && !!refreshWarning && refreshFrequency < refreshLimit;
+
     return (
       <ModalTrigger
+        ref={this.modalRef}
         triggerNode={this.props.triggerNode}
-        isMenuItem
         modalTitle={t('Refresh Interval')}
         modalBody={
           <div>
-            {t('Choose the refresh frequency for this dashboard')}
+            <FormLabel>{t('Refresh frequency')}</FormLabel>
             <Select
               options={options}
               value={this.state.refreshFrequency}
               onChange={this.handleFrequencyChange}
             />
+            {showRefreshWarning && (
+              <RefreshWarningContainer>
+                <Alert bsStyle="warning">
+                  <div>{refreshWarning}</div>
+                  <br />
+                  <strong>{t('Are you sure you want to proceed?')}</strong>
+                </Alert>
+              </RefreshWarningContainer>
+            )}
           </div>
+        }
+        modalFooter={
+          <>
+            <Button buttonStyle="primary" buttonSize="sm" onClick={this.onSave}>
+              {editMode ? t('Save') : t('Save for this session')}
+            </Button>
+            <Button onClick={this.onCancel} buttonSize="sm">
+              {t('Cancel')}
+            </Button>
+          </>
         }
       />
     );
   }
 }
 RefreshIntervalModal.propTypes = propTypes;
+RefreshIntervalModal.defaultProps = defaultProps;
 
 export default RefreshIntervalModal;

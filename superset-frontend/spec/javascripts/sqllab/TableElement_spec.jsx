@@ -18,13 +18,20 @@
  */
 import React from 'react';
 import { mount, shallow } from 'enzyme';
+import { Provider } from 'react-redux';
+import configureStore from 'redux-mock-store';
+import { supersetTheme, ThemeProvider } from '@superset-ui/core';
 
-import Link from '../../../src/SqlLab/components/Link';
-import TableElement from '../../../src/SqlLab/components/TableElement';
-import ColumnElement from '../../../src/SqlLab/components/ColumnElement';
+import Link from 'src/components/Link';
+import Fade from 'src/common/components/Fade';
+import TableElement from 'src/SqlLab/components/TableElement';
+import ColumnElement from 'src/SqlLab/components/ColumnElement';
+
 import { mockedActions, table } from './fixtures';
 
 describe('TableElement', () => {
+  const mockStore = configureStore([]);
+  const store = mockStore({});
   const mockedProps = {
     actions: mockedActions,
     table,
@@ -45,28 +52,48 @@ describe('TableElement', () => {
     expect(wrapper.find(ColumnElement)).toHaveLength(14);
   });
   it('mounts', () => {
-    mount(<TableElement {...mockedProps} />);
+    mount(
+      <Provider store={store}>
+        <TableElement {...mockedProps} />
+      </Provider>,
+      {
+        wrappingComponent: ThemeProvider,
+        wrappingComponentProps: {
+          theme: supersetTheme,
+        },
+      },
+    );
+  });
+  it('fades table', () => {
+    const wrapper = shallow(<TableElement {...mockedProps} />);
+    expect(wrapper.state().hovered).toBe(false);
+    expect(wrapper.find(Fade).props().hovered).toBe(false);
+    wrapper.find('div.TableElement').simulate('mouseEnter');
+    expect(wrapper.state().hovered).toBe(true);
+    expect(wrapper.find(Fade).props().hovered).toBe(true);
   });
   it('sorts columns', () => {
     const wrapper = shallow(<TableElement {...mockedProps} />);
     expect(wrapper.state().sortColumns).toBe(false);
-    expect(
-      wrapper
-        .find(ColumnElement)
-        .first()
-        .props().column.name,
-    ).toBe('id');
+    expect(wrapper.find(ColumnElement).first().props().column.name).toBe('id');
     wrapper.find('.sort-cols').simulate('click');
     expect(wrapper.state().sortColumns).toBe(true);
-    expect(
-      wrapper
-        .find(ColumnElement)
-        .first()
-        .props().column.name,
-    ).toBe('active');
+    expect(wrapper.find(ColumnElement).first().props().column.name).toBe(
+      'active',
+    );
   });
   it('calls the collapseTable action', () => {
-    const wrapper = mount(<TableElement {...mockedProps} />);
+    const wrapper = mount(
+      <Provider store={store}>
+        <TableElement {...mockedProps} />
+      </Provider>,
+      {
+        wrappingComponent: ThemeProvider,
+        wrappingComponentProps: {
+          theme: supersetTheme,
+        },
+      },
+    );
     expect(mockedActions.collapseTable.called).toBe(false);
     wrapper.find('.table-name').simulate('click');
     expect(mockedActions.collapseTable.called).toBe(true);

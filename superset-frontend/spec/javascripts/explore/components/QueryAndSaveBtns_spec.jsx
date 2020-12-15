@@ -20,12 +20,12 @@ import React from 'react';
 import { shallow } from 'enzyme';
 import sinon from 'sinon';
 
-import QueryAndSaveButtons from '../../../../src/explore/components/QueryAndSaveBtns';
-import Button from '../../../../src/components/Button';
+import QueryAndSaveButtons from 'src/explore/components/QueryAndSaveBtns';
+import Button from 'src/components/Button';
 
 describe('QueryAndSaveButtons', () => {
   const defaultProps = {
-    canAdd: 'True',
+    canAdd: true,
     onQuery: sinon.spy(),
   };
 
@@ -49,12 +49,12 @@ describe('QueryAndSaveButtons', () => {
     });
 
     it('renders buttons with correct text', () => {
-      expect(wrapper.find(Button).contains(' Run Query')).toBe(true);
-      expect(wrapper.find(Button).contains(' Save')).toBe(true);
+      expect(wrapper.find(Button).contains('Run')).toBe(true);
+      expect(wrapper.find(Button).contains('Save')).toBe(true);
     });
 
     it('calls onQuery when query button is clicked', () => {
-      const queryButton = wrapper.find('.query');
+      const queryButton = wrapper.find('[data-test="run-query-button"]');
       queryButton.simulate('click');
       expect(defaultProps.onQuery.called).toBe(true);
     });

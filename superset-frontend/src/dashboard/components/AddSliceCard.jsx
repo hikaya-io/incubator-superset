@@ -19,27 +19,31 @@
 import cx from 'classnames';
 import React from 'react';
 import PropTypes from 'prop-types';
-import { t } from '@superset-ui/translation';
+import { t } from '@superset-ui/core';
 
 const propTypes = {
-  datasourceLink: PropTypes.string,
+  datasourceUrl: PropTypes.string,
+  datasourceName: PropTypes.string,
   innerRef: PropTypes.func,
   isSelected: PropTypes.bool,
-  lastModified: PropTypes.string.isRequired,
+  lastModified: PropTypes.string,
   sliceName: PropTypes.string.isRequired,
   style: PropTypes.object,
   visType: PropTypes.string.isRequired,
 };
 
 const defaultProps = {
-  datasourceLink: '—',
+  datasourceUrl: null,
+  datasourceName: '-',
   innerRef: null,
   isSelected: false,
   style: null,
+  lastModified: null,
 };
 
 function AddSliceCard({
-  datasourceLink,
+  datasourceUrl,
+  datasourceName,
   innerRef,
   isSelected,
   lastModified,
@@ -49,8 +53,13 @@ function AddSliceCard({
 }) {
   return (
     <div ref={innerRef} className="chart-card-container" style={style}>
-      <div className={cx('chart-card', isSelected && 'is-selected')}>
-        <div className="card-title">{sliceName}</div>
+      <div
+        className={cx('chart-card', isSelected && 'is-selected')}
+        data-test="chart-card"
+      >
+        <div className="card-title" data-test="card-title">
+          {sliceName}
+        </div>
         <div className="card-body">
           <div className="item">
             <span>{t('Modified')} </span>
@@ -62,9 +71,7 @@ function AddSliceCard({
           </div>
           <div className="item">
             <span>{t('Data source')} </span>
-            <span // eslint-disable-next-line react/no-danger
-              dangerouslySetInnerHTML={{ __html: datasourceLink }}
-            />
+            <a href={datasourceUrl}>{datasourceName}</a>
           </div>
         </div>
       </div>

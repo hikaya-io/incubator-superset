@@ -20,11 +20,15 @@
 *.pyc
 *.sqllite
 *.swp
+__pycache__
+
 .bento*
 .cache-loader
 .coverage
+cover
 .DS_Store
 .eggs
+.env
 .envrc
 .idea
 .mypy_cache
@@ -80,3 +84,5 @@ apache-superset-*.tar.gz*
 
 # Translation binaries
 messages.mo
+
+docker/requirements-local.txt

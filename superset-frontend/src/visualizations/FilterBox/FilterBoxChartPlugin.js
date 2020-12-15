@@ -16,21 +16,23 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { t } from '@superset-ui/translation';
-import { ChartMetadata, ChartPlugin } from '@superset-ui/chart';
+import { t, ChartMetadata, ChartPlugin } from '@superset-ui/core';
 import transformProps from './transformProps';
 import thumbnail from './images/thumbnail.png';
+import controlPanel from './controlPanel';
 
 const metadata = new ChartMetadata({
   name: t('Filter Box'),
   description:
     'A multi filter, multi-choice filter box to make dashboards interactive',
   thumbnail,
+  useLegacyApi: true,
 });
 
 export default class FilterBoxChartPlugin extends ChartPlugin {
   constructor() {
     super({
+      controlPanel,
       metadata,
       transformProps,
       loadChart: () => import('./FilterBox.jsx'),

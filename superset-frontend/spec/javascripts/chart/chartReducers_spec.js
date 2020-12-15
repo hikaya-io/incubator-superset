@@ -16,8 +16,8 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import chartReducer, { chart } from '../../../src/chart/chartReducer';
-import * as actions from '../../../src/chart/chartAction';
+import chartReducer, { chart } from 'src/chart/chartReducer';
+import * as actions from 'src/chart/chartAction';
 
 describe('chart reducers', () => {
   const chartKey = 1;
@@ -40,7 +40,21 @@ describe('chart reducers', () => {
   it('should update endtime on timeout', () => {
     const newState = chartReducer(
       charts,
-      actions.chartUpdateTimeout('timeout', 60, chartKey),
+      actions.chartUpdateFailed(
+        {
+          statusText: 'timeout',
+          error: 'Request timed out',
+          errors: [
+            {
+              error_type: 'FRONTEND_TIMEOUT_ERROR',
+              extra: { timeout: 1 },
+              level: 'error',
+              message: 'Request timed out',
+            },
+          ],
+        },
+        chartKey,
+      ),
     );
     expect(newState[chartKey].chartUpdateEndTime).toBeGreaterThan(0);
     expect(newState[chartKey].chartStatus).toEqual('failed');

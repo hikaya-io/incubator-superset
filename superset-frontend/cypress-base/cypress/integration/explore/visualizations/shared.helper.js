@@ -59,9 +59,42 @@ export const NUM_METRIC = {
   aggregate: 'SUM',
   sqlExpression: null,
   hasCustomLabel: false,
-  fromFormData: false,
   label: 'Sum(num)',
   optionName: 'metric_1de0s4viy5d_ly7y8k6ghvk',
+};
+
+export const MAX_DS = {
+  aggregate: 'MAX',
+  column: {
+    column_name: 'ds',
+    description: null,
+    expression: null,
+    filterable: true,
+    groupby: true,
+    id: 333,
+    is_dttm: true,
+    optionName: '_col_ds',
+    python_date_format: null,
+    type: 'TIMESTAMP WITHOUT TIME ZONE',
+    verbose_name: null,
+  },
+  expressionType: 'SIMPLE',
+  hasCustomLabel: false,
+  isNew: false,
+  label: 'MAX(ds)',
+  optionName: 'metric_pbib7j9m15a_js80vs9vca',
+  sqlExpression: null,
+};
+
+export const MAX_STATE = {
+  expressionType: 'SQL',
+  sqlExpression: 'MAX(UPPER(state))',
+  column: null,
+  aggregate: null,
+  isNew: false,
+  hasCustomLabel: false,
+  label: 'MAX(UPPER(state))',
+  optionName: 'metric_kvval50pvbo_hewj3pzacb',
 };
 
 export const SIMPLE_FILTER = {
@@ -71,6 +104,5 @@ export const SIMPLE_FILTER = {
   comparator: ['Aaron', 'Amy', 'Andrea'],
   clause: 'WHERE',
   sqlExpression: null,
-  fromFormData: true,
   filterOptionName: 'filter_4y6teao56zs_ebjsvwy48c',
 };

@@ -18,8 +18,8 @@
  */
 import React from 'react';
 import { mount } from 'enzyme';
-
-import CssEditor from '../../../../src/dashboard/components/CssEditor';
+import { supersetTheme, ThemeProvider } from '@superset-ui/core';
+import CssEditor from 'src/dashboard/components/CssEditor';
 
 describe('CssEditor', () => {
   const mockedProps = {
@@ -29,7 +29,12 @@ describe('CssEditor', () => {
     expect(React.isValidElement(<CssEditor {...mockedProps} />)).toBe(true);
   });
   it('renders the trigger node', () => {
-    const wrapper = mount(<CssEditor {...mockedProps} />);
-    expect(wrapper.find('.fa-edit')).toHaveLength(1);
+    const wrapper = mount(<CssEditor {...mockedProps} />, {
+      wrappingComponent: ThemeProvider,
+      wrappingComponentProps: {
+        theme: supersetTheme,
+      },
+    });
+    expect(wrapper.find('.fa-edit')).toExist();
   });
 });

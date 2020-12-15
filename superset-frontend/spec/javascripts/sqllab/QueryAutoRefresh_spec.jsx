@@ -22,7 +22,7 @@ import sinon from 'sinon';
 import thunk from 'redux-thunk';
 import configureStore from 'redux-mock-store';
 
-import QueryAutoRefresh from '../../../src/SqlLab/components/QueryAutoRefresh';
+import QueryAutoRefresh from 'src/SqlLab/components/QueryAutoRefresh';
 import { initialState, runningQuery } from './fixtures';
 
 describe('QueryAutoRefresh', () => {
@@ -39,12 +39,10 @@ describe('QueryAutoRefresh', () => {
     sqlLab,
   };
   const store = mockStore(state);
-
   const getWrapper = () =>
-    shallow(<QueryAutoRefresh />, {
-      context: { store },
-    }).dive();
-
+    shallow(<QueryAutoRefresh store={store} />)
+      .dive()
+      .dive();
   let wrapper;
 
   it('shouldCheckForQueries', () => {

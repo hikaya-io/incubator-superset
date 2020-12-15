@@ -18,8 +18,9 @@
  */
 import React from 'react';
 import { mount } from 'enzyme';
+import { supersetTheme, ThemeProvider } from '@superset-ui/core';
 
-import CodeModal from '../../../../src/dashboard/components/CodeModal';
+import CodeModal from 'src/dashboard/components/CodeModal';
 
 describe('CodeModal', () => {
   const mockedProps = {
@@ -29,7 +30,10 @@ describe('CodeModal', () => {
     expect(React.isValidElement(<CodeModal {...mockedProps} />)).toBe(true);
   });
   it('renders the trigger node', () => {
-    const wrapper = mount(<CodeModal {...mockedProps} />);
-    expect(wrapper.find('.fa-edit')).toHaveLength(1);
+    const wrapper = mount(<CodeModal {...mockedProps} />, {
+      wrappingComponent: ThemeProvider,
+      wrappingComponentProps: { theme: supersetTheme },
+    });
+    expect(wrapper.find('.fa-edit')).toExist();
   });
 });

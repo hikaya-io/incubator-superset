@@ -20,26 +20,27 @@ import React from 'react';
 import configureStore from 'redux-mock-store';
 import { shallow } from 'enzyme';
 
-import URLShortLinkModal from '../../../src/components/URLShortLinkModal';
-import ModalTrigger from '../../../src/components/ModalTrigger';
+import URLShortLinkModal from 'src/components/URLShortLinkModal';
+import ModalTrigger from 'src/components/ModalTrigger';
 
 describe('URLShortLinkModal', () => {
   const defaultProps = {
     url: 'mockURL',
     emailSubject: 'Mock Subject',
     emailContent: 'mock content',
+    triggerNode: <div />,
   };
 
   function setup() {
     const mockStore = configureStore([]);
     const store = mockStore({});
-    return shallow(<URLShortLinkModal {...defaultProps} />, {
-      context: { store },
-    }).dive();
+    return shallow(
+      <URLShortLinkModal store={store} {...defaultProps} />,
+    ).dive();
   }
 
   it('renders ModalTrigger', () => {
     const wrapper = setup();
-    expect(wrapper.find(ModalTrigger)).toHaveLength(1);
+    expect(wrapper.find(ModalTrigger)).toExist();
   });
 });

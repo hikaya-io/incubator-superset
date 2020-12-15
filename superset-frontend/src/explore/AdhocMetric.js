@@ -72,8 +72,8 @@ export default class AdhocMetric {
       this.column = null;
       this.aggregate = null;
     }
+    this.isNew = !!adhocMetric.isNew;
     this.hasCustomLabel = !!(adhocMetric.hasCustomLabel && adhocMetric.label);
-    this.fromFormData = !!adhocMetric.optionName;
     this.label = this.hasCustomLabel
       ? adhocMetric.label
       : this.getDefaultLabel();
@@ -82,22 +82,21 @@ export default class AdhocMetric {
       adhocMetric.optionName ||
       `metric_${Math.random()
         .toString(36)
-        .substring(2, 15)}_${Math.random()
-        .toString(36)
-        .substring(2, 15)}`;
+        .substring(2, 15)}_${Math.random().toString(36).substring(2, 15)}`;
   }
 
   getDefaultLabel() {
     const label = this.translateToSql();
-    return label.length < 43 ? label : label.substring(0, 40) + '...';
+    return label.length < 43 ? label : `${label.substring(0, 40)}...`;
   }
 
   translateToSql() {
     if (this.expressionType === EXPRESSION_TYPES.SIMPLE) {
-      return `${this.aggregate || ''}(${(this.column &&
-        this.column.column_name) ||
-        ''})`;
-    } else if (this.expressionType === EXPRESSION_TYPES.SQL) {
+      return `${this.aggregate || ''}(${
+        (this.column && this.column.column_name) || ''
+      })`;
+    }
+    if (this.expressionType === EXPRESSION_TYPES.SQL) {
       return this.sqlExpression;
     }
     return '';
@@ -106,6 +105,9 @@ export default class AdhocMetric {
   duplicateWith(nextFields) {
     return new AdhocMetric({
       ...this,
+      // all duplicate metrics are not considered new by default
+      isNew: false,
+      // but still overriddable by nextFields
       ...nextFields,
     });
   }
@@ -124,7 +126,8 @@ export default class AdhocMetric {
   isValid() {
     if (this.expressionType === EXPRESSION_TYPES.SIMPLE) {
       return !!(this.column && this.aggregate);
-    } else if (this.expressionType === EXPRESSION_TYPES.SQL) {
+    }
+    if (this.expressionType === EXPRESSION_TYPES.SQL) {
       return !!this.sqlExpression;
     }
     return false;

@@ -20,8 +20,9 @@ import React from 'react';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { mount, shallow } from 'enzyme';
 
-import HighlightedSql from '../../../src/SqlLab/components/HighlightedSql';
-import ModalTrigger from '../../../src/components/ModalTrigger';
+import HighlightedSql from 'src/SqlLab/components/HighlightedSql';
+import ModalTrigger from 'src/components/ModalTrigger';
+import { supersetTheme, ThemeProvider } from '@superset-ui/core';
 
 describe('HighlightedSql', () => {
   const sql =
@@ -31,11 +32,11 @@ describe('HighlightedSql', () => {
   });
   it('renders a ModalTrigger', () => {
     const wrapper = shallow(<HighlightedSql sql={sql} />);
-    expect(wrapper.find(ModalTrigger)).toHaveLength(1);
+    expect(wrapper.find(ModalTrigger)).toExist();
   });
   it('renders a ModalTrigger while using shrink', () => {
     const wrapper = shallow(<HighlightedSql sql={sql} shrink maxWidth={20} />);
-    expect(wrapper.find(ModalTrigger)).toHaveLength(1);
+    expect(wrapper.find(ModalTrigger)).toExist();
   });
   it('renders two SyntaxHighlighter in modal', () => {
     const wrapper = mount(
@@ -45,6 +46,12 @@ describe('HighlightedSql', () => {
         shrink
         maxWidth={5}
       />,
+      {
+        wrappingComponent: ThemeProvider,
+        wrappingComponentProps: {
+          theme: supersetTheme,
+        },
+      },
     );
     const pre = wrapper.find('pre');
     expect(pre).toHaveLength(1);

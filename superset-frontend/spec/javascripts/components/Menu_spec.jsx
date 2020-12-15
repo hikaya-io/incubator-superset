@@ -19,24 +19,21 @@
 import React from 'react';
 import { shallow, mount } from 'enzyme';
 import { Nav } from 'react-bootstrap';
+import { Menu as DropdownMenu } from 'src/common/components';
+import NavDropdown from 'src/components/NavDropdown';
+import { supersetTheme, ThemeProvider } from '@superset-ui/core';
 
-import Menu from '../../../src/components/Menu/Menu';
+import { Menu } from 'src/components/Menu/Menu';
+import MenuObject from 'src/components/Menu/MenuObject';
 
 const defaultProps = {
   data: {
     menu: [
       {
-        name: 'Security',
-        icon: 'fa-cogs',
-        label: 'Security',
-        childs: [
-          {
-            name: 'List Users',
-            icon: 'fa-user',
-            label: 'List Users',
-            url: '/users/list/',
-          },
-        ],
+        name: 'Home',
+        icon: '',
+        label: 'Home',
+        url: '/superset/welcome',
       },
       {
         name: 'Sources',
@@ -44,9 +41,9 @@ const defaultProps = {
         label: 'Sources',
         childs: [
           {
-            name: 'Tables',
+            name: 'Datasets',
             icon: 'fa-table',
-            label: 'Tables',
+            label: 'Datasets',
             url: '/tablemodelview/list/?_flt_1_is_sqllab_view=y',
           },
           '-',
@@ -73,8 +70,9 @@ const defaultProps = {
     ],
     brand: {
       path: '/superset/profile/admin/',
-      icon: '/static/assets/images/superset-logo@2x.png',
+      icon: '/static/assets/images/superset-logo-horiz.png',
       alt: 'Superset',
+      width: '126',
     },
     navbar_right: {
       bug_report_url: null,
@@ -98,6 +96,21 @@ const defaultProps = {
       user_login_url: '/login/',
       locale: 'en',
     },
+    settings: [
+      {
+        name: 'Security',
+        icon: 'fa-cogs',
+        label: 'Security',
+        childs: [
+          {
+            name: 'List Users',
+            icon: 'fa-user',
+            label: 'List Users',
+            url: '/users/list/',
+          },
+        ],
+      },
+    ],
   },
 };
 
@@ -117,11 +130,15 @@ describe('Menu', () => {
   });
 
   it('renders the brand', () => {
-    expect(wrapper.find('.navbar-brand')).toHaveLength(1);
+    expect(wrapper.find('.navbar-brand')).toExist();
   });
 
   it('renders 2 navs', () => {
     expect(wrapper.find(Nav)).toHaveLength(2);
+  });
+
+  it('renders 4 elements in main Menu Nav for every user', () => {
+    expect(wrapper.find(MenuObject)).toHaveLength(4);
   });
 
   it('renders a logged out view', () => {
@@ -155,8 +172,19 @@ describe('Menu', () => {
       ...overrideProps,
     };
 
-    const versionedWrapper = mount(<Menu {...props} />);
+    const versionedWrapper = mount(<Menu {...props} />, {
+      wrappingComponent: ThemeProvider,
+      wrappingComponentProps: { theme: supersetTheme },
+    });
 
-    expect(versionedWrapper.find('.version-info div')).toHaveLength(2);
+    expect(versionedWrapper.find('.version-info span')).toHaveLength(2);
+  });
+
+  it('renders a NavDropdown (settings)', () => {
+    expect(wrapper.find(NavDropdown)).toHaveLength(1);
+  });
+
+  it('renders MenuItems in NavDropdown (settings)', () => {
+    expect(wrapper.find(NavDropdown).find(DropdownMenu.Item)).toHaveLength(3);
   });
 });

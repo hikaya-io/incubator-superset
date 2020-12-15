@@ -20,20 +20,21 @@ import { Provider } from 'react-redux';
 import React from 'react';
 import { mount } from 'enzyme';
 import sinon from 'sinon';
+import { supersetTheme, ThemeProvider } from '@superset-ui/core';
 
-import BackgroundStyleDropdown from '../../../../../src/dashboard/components/menu/BackgroundStyleDropdown';
-import Column from '../../../../../src/dashboard/components/gridComponents/Column';
-import DashboardComponent from '../../../../../src/dashboard/containers/DashboardComponent';
-import DeleteComponentButton from '../../../../../src/dashboard/components/DeleteComponentButton';
-import DragDroppable from '../../../../../src/dashboard/components/dnd/DragDroppable';
-import HoverMenu from '../../../../../src/dashboard/components/menu/HoverMenu';
-import IconButton from '../../../../../src/dashboard/components/IconButton';
-import ResizableContainer from '../../../../../src/dashboard/components/resizable/ResizableContainer';
-import WithPopoverMenu from '../../../../../src/dashboard/components/menu/WithPopoverMenu';
+import BackgroundStyleDropdown from 'src/dashboard/components/menu/BackgroundStyleDropdown';
+import Column from 'src/dashboard/components/gridComponents/Column';
+import DashboardComponent from 'src/dashboard/containers/DashboardComponent';
+import DeleteComponentButton from 'src/dashboard/components/DeleteComponentButton';
+import DragDroppable from 'src/dashboard/components/dnd/DragDroppable';
+import HoverMenu from 'src/dashboard/components/menu/HoverMenu';
+import IconButton from 'src/dashboard/components/IconButton';
+import ResizableContainer from 'src/dashboard/components/resizable/ResizableContainer';
+import WithPopoverMenu from 'src/dashboard/components/menu/WithPopoverMenu';
 
-import { mockStore } from '../../fixtures/mockStore';
-import { dashboardLayout as mockLayout } from '../../fixtures/mockDashboardLayout';
-import WithDragDropContext from '../../helpers/WithDragDropContext';
+import WithDragDropContext from 'spec/helpers/WithDragDropContext';
+import { mockStore } from 'spec/fixtures/mockStore';
+import { dashboardLayout as mockLayout } from 'spec/fixtures/mockDashboardLayout';
 
 describe('Column', () => {
   const columnWithoutChildren = {
@@ -69,6 +70,10 @@ describe('Column', () => {
           <Column {...props} {...overrideProps} />
         </WithDragDropContext>
       </Provider>,
+      {
+        wrappingComponent: ThemeProvider,
+        wrappingComponentProps: { theme: supersetTheme },
+      },
     );
     return wrapper;
   }
@@ -76,42 +81,42 @@ describe('Column', () => {
   it('should render a DragDroppable', () => {
     // don't count child DragDroppables
     const wrapper = setup({ component: columnWithoutChildren });
-    expect(wrapper.find(DragDroppable)).toHaveLength(1);
+    expect(wrapper.find(DragDroppable)).toExist();
   });
 
   it('should render a WithPopoverMenu', () => {
     // don't count child DragDroppables
     const wrapper = setup({ component: columnWithoutChildren });
-    expect(wrapper.find(WithPopoverMenu)).toHaveLength(1);
+    expect(wrapper.find(WithPopoverMenu)).toExist();
   });
 
   it('should render a ResizableContainer', () => {
     // don't count child DragDroppables
     const wrapper = setup({ component: columnWithoutChildren });
-    expect(wrapper.find(ResizableContainer)).toHaveLength(1);
+    expect(wrapper.find(ResizableContainer)).toExist();
   });
 
   it('should render a HoverMenu in editMode', () => {
     let wrapper = setup({ component: columnWithoutChildren });
-    expect(wrapper.find(HoverMenu)).toHaveLength(0);
+    expect(wrapper.find(HoverMenu)).not.toExist();
 
     // we cannot set props on the Row because of the WithDragDropContext wrapper
     wrapper = setup({ component: columnWithoutChildren, editMode: true });
-    expect(wrapper.find(HoverMenu)).toHaveLength(1);
+    expect(wrapper.find(HoverMenu)).toExist();
   });
 
   it('should render a DeleteComponentButton in editMode', () => {
     let wrapper = setup({ component: columnWithoutChildren });
-    expect(wrapper.find(DeleteComponentButton)).toHaveLength(0);
+    expect(wrapper.find(DeleteComponentButton)).not.toExist();
 
     // we cannot set props on the Row because of the WithDragDropContext wrapper
     wrapper = setup({ component: columnWithoutChildren, editMode: true });
-    expect(wrapper.find(DeleteComponentButton)).toHaveLength(1);
+    expect(wrapper.find(DeleteComponentButton)).toExist();
   });
 
   it('should render a BackgroundStyleDropdown when focused', () => {
     let wrapper = setup({ component: columnWithoutChildren });
-    expect(wrapper.find(BackgroundStyleDropdown)).toHaveLength(0);
+    expect(wrapper.find(BackgroundStyleDropdown)).not.toExist();
 
     // we cannot set props on the Row because of the WithDragDropContext wrapper
     wrapper = setup({ component: columnWithoutChildren, editMode: true });
@@ -120,7 +125,7 @@ describe('Column', () => {
       .at(1) // first one is delete button
       .simulate('click');
 
-    expect(wrapper.find(BackgroundStyleDropdown)).toHaveLength(1);
+    expect(wrapper.find(BackgroundStyleDropdown)).toExist();
   });
 
   it('should call deleteComponent when deleted', () => {

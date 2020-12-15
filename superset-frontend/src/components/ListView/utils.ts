@@ -27,13 +27,37 @@ import {
 } from 'react-table';
 
 import {
-  JsonParam,
   NumberParam,
   StringParam,
   useQueryParams,
+  QueryParamConfig,
 } from 'use-query-params';
 
-import { FetchDataConfig, InternalFilter, SortColumn } from './types';
+import rison from 'rison';
+import { isEqual } from 'lodash';
+import { PartialStylesConfig } from 'src/components/Select';
+import {
+  FetchDataConfig,
+  Filter,
+  FilterValue,
+  InternalFilter,
+  SortColumn,
+  ViewModeType,
+} from './types';
+
+// Define custom RisonParam for proper encoding/decoding
+const RisonParam: QueryParamConfig<string, any> = {
+  encode: (data?: any | null) =>
+    data === undefined ? undefined : rison.encode(data),
+  decode: (dataStr?: string | string[]) =>
+    dataStr === undefined || Array.isArray(dataStr)
+      ? undefined
+      : rison.decode(dataStr),
+};
+
+export class ListViewError extends Error {
+  name = 'ListViewError';
+}
 
 // removes element from a list, returns new list
 export function removeFromList(list: any[], index: number): any[] {
@@ -51,17 +75,85 @@ function updateInList(list: any[], index: number, update: any): any[] {
   ];
 }
 
-// convert filters from UI objects to data objects
-export function convertFilters(fts: InternalFilter[]) {
-  return fts
-    .filter((ft: InternalFilter) => ft.value)
-    .map(ft => ({ operator: ft.operator, ...ft }));
+type QueryFilterState = {
+  [id: string]: FilterValue['value'];
+};
+
+function mergeCreateFilterValues(list: Filter[], updateObj: QueryFilterState) {
+  return list.map(({ id, operator }) => {
+    const update = updateObj[id];
+
+    return { id, operator, value: update };
+  });
 }
 
-export function extractInputValue(
-  inputType: 'text' | 'textarea' | 'checkbox' | 'select' | undefined,
-  event: any,
-) {
+// convert filters from UI objects to data objects
+export function convertFilters(fts: InternalFilter[]): FilterValue[] {
+  return fts
+    .filter(
+      f =>
+        !(
+          typeof f.value === 'undefined' ||
+          (Array.isArray(f.value) && !f.value.length)
+        ),
+    )
+    .map(({ value, operator, id }) => {
+      // handle between filter using 2 api filters
+      if (operator === 'between' && Array.isArray(value)) {
+        return [
+          {
+            value: value[0],
+            operator: 'gt',
+            id,
+          },
+          {
+            value: value[1],
+            operator: 'lt',
+            id,
+          },
+        ];
+      }
+      return {
+        value,
+        operator,
+        id,
+      };
+    })
+    .flat();
+}
+
+// convertFilters but to handle new decoded rison format
+export function convertFiltersRison(
+  filterObj: any,
+  list: Filter[],
+): FilterValue[] {
+  const filters: FilterValue[] = [];
+  const refs = {};
+
+  Object.keys(filterObj).forEach(id => {
+    const filter: FilterValue = {
+      id,
+      value: filterObj[id],
+      // operator: filterObj[id][1], // TODO: can probably get rid of this
+    };
+
+    refs[id] = filter;
+    filters.push(filter);
+  });
+
+  // Add operators from filter list
+  list.forEach(value => {
+    const filter = refs[value.id];
+
+    if (filter) {
+      filter.operator = value.operator;
+    }
+  });
+
+  return filters;
+}
+
+export function extractInputValue(inputType: Filter['input'], event: any) {
   if (!inputType || inputType === 'text') {
     return event.currentTarget.value;
   }
@@ -80,11 +172,14 @@ interface UseListViewConfig {
   initialPageSize: number;
   initialSort?: SortColumn[];
   bulkSelectMode?: boolean;
+  initialFilters?: Filter[];
   bulkSelectColumnConfig?: {
     id: string;
     Header: (conf: any) => React.ReactNode;
     Cell: (conf: any) => React.ReactNode;
   };
+  renderCard?: boolean;
+  defaultViewMode?: ViewModeType;
 }
 
 export function useListViewState({
@@ -93,15 +188,19 @@ export function useListViewState({
   data,
   count,
   initialPageSize,
+  initialFilters = [],
   initialSort = [],
   bulkSelectMode = false,
   bulkSelectColumnConfig,
+  renderCard = false,
+  defaultViewMode = 'card',
 }: UseListViewConfig) {
   const [query, setQuery] = useQueryParams({
-    filters: JsonParam,
+    filters: RisonParam,
     pageIndex: NumberParam,
     sortColumn: StringParam,
     sortOrder: StringParam,
+    viewMode: StringParam,
   });
 
   const initialSortBy = useMemo(
@@ -113,16 +212,26 @@ export function useListViewState({
   );
 
   const initialState = {
-    filters: convertFilters(query.filters || []),
+    filters: query.filters
+      ? convertFiltersRison(query.filters, initialFilters)
+      : [],
     pageIndex: query.pageIndex || 0,
     pageSize: initialPageSize,
     sortBy: initialSortBy,
   };
 
-  const columnsWithSelect = useMemo(
-    () => (bulkSelectMode ? [bulkSelectColumnConfig, ...columns] : columns),
-    [bulkSelectMode, columns],
+  const [viewMode, setViewMode] = useState<ViewModeType>(
+    (query.viewMode as ViewModeType) ||
+      (renderCard ? defaultViewMode : 'table'),
   );
+
+  const columnsWithSelect = useMemo(() => {
+    // add exact filter type so filters with falsey values are not filtered out
+    const columnsWithFilter = columns.map(f => ({ ...f, filter: 'exact' }));
+    return bulkSelectMode
+      ? [bulkSelectColumnConfig, ...columnsWithFilter]
+      : columnsWithFilter;
+  }, [bulkSelectMode, columns]);
 
   const {
     getTableProps,
@@ -136,6 +245,7 @@ export function useListViewState({
     gotoPage,
     setAllFilters,
     selectedFlatRows,
+    toggleAllRowsSelected,
     state: { pageIndex, pageSize, sortBy, filters },
   } = useTable(
     {
@@ -148,6 +258,7 @@ export function useListViewState({
       manualFilters: true,
       manualPagination: true,
       manualSortBy: true,
+      autoResetFilters: false,
       pageCount: Math.ceil(count / initialPageSize),
     },
     useFilters,
@@ -158,38 +269,85 @@ export function useListViewState({
   );
 
   const [internalFilters, setInternalFilters] = useState<InternalFilter[]>(
-    query.filters || [],
+    query.filters && initialFilters.length
+      ? mergeCreateFilterValues(initialFilters, query.filters)
+      : [],
   );
 
   useEffect(() => {
+    if (initialFilters.length) {
+      setInternalFilters(
+        mergeCreateFilterValues(
+          initialFilters,
+          query.filters ? query.filters : {},
+        ),
+      );
+    }
+  }, [initialFilters]);
+
+  useEffect(() => {
+    // From internalFilters, produce a simplified obj
+    const filterObj = {};
+
+    internalFilters.forEach(filter => {
+      if (
+        filter.value !== undefined &&
+        (typeof filter.value !== 'string' || filter.value.length > 0)
+      ) {
+        filterObj[filter.id] = filter.value;
+      }
+    });
+
     const queryParams: any = {
-      filters: internalFilters,
+      filters: Object.keys(filterObj).length ? filterObj : undefined,
       pageIndex,
     };
     if (sortBy[0]) {
       queryParams.sortColumn = sortBy[0].id;
       queryParams.sortOrder = sortBy[0].desc ? 'desc' : 'asc';
     }
-    setQuery(queryParams);
 
+    if (renderCard) {
+      queryParams.viewMode = viewMode;
+    }
+
+    const method =
+      typeof query.pageIndex !== 'undefined' &&
+      queryParams.pageIndex !== query.pageIndex
+        ? 'push'
+        : 'replace';
+
+    setQuery(queryParams, method);
     fetchData({ pageIndex, pageSize, sortBy, filters });
-  }, [fetchData, pageIndex, pageSize, sortBy, filters]);
+  }, [fetchData, pageIndex, pageSize, sortBy, filters, viewMode]);
 
-  const filtersApplied = internalFilters.every(
-    ({ id, value, operator }, index) =>
-      id &&
-      filters[index] &&
-      filters[index].id === id &&
-      filters[index].value === value &&
-      // @ts-ignore
-      filters[index].operator === operator,
-  );
+  useEffect(() => {
+    if (!isEqual(initialState.pageIndex, pageIndex)) {
+      gotoPage(initialState.pageIndex);
+    }
+  }, [query]);
+
+  const applyFilterValue = (index: number, value: any) => {
+    setInternalFilters(currentInternalFilters => {
+      // skip redunundant updates
+      if (currentInternalFilters[index].value === value) {
+        return currentInternalFilters;
+      }
+      const update = { ...currentInternalFilters[index], value };
+      const updatedFilters = updateInList(
+        currentInternalFilters,
+        index,
+        update,
+      );
+      setAllFilters(convertFilters(updatedFilters));
+      gotoPage(0); // clear pagination on filter
+      return updatedFilters;
+    });
+  };
 
   return {
-    applyFilters: () => setAllFilters(convertFilters(internalFilters)),
     canNextPage,
     canPreviousPage,
-    filtersApplied,
     getTableBodyProps,
     getTableProps,
     gotoPage,
@@ -199,9 +357,27 @@ export function useListViewState({
     rows,
     selectedFlatRows,
     setAllFilters,
-    setInternalFilters,
-    state: { pageIndex, pageSize, sortBy, filters, internalFilters },
-    updateInternalFilter: (index: number, update: object) =>
-      setInternalFilters(updateInList(internalFilters, index, update)),
+    state: { pageIndex, pageSize, sortBy, filters, internalFilters, viewMode },
+    toggleAllRowsSelected,
+    applyFilterValue,
+    setViewMode,
   };
 }
+
+export const filterSelectStyles: PartialStylesConfig = {
+  container: (provider, { getValue }) => ({
+    ...provider,
+    // dynamic width based on label string length
+    minWidth: `${Math.min(
+      12,
+      Math.max(5, 3 + getValue()[0].label.length / 2),
+    )}em`,
+  }),
+  control: provider => ({
+    ...provider,
+    borderWidth: 0,
+    boxShadow: 'none',
+    cursor: 'pointer',
+    backgroundColor: 'transparent',
+  }),
+};

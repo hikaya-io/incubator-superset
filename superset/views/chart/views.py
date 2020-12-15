@@ -20,12 +20,18 @@ from flask_appbuilder import expose, has_access
 from flask_appbuilder.models.sqla.interface import SQLAInterface
 from flask_babel import lazy_gettext as _
 
-from superset import app, db
+from superset import db, is_feature_enabled
 from superset.connectors.connector_registry import ConnectorRegistry
-from superset.constants import RouteMethod
+from superset.constants import MODEL_VIEW_RW_METHOD_PERMISSION_MAP, RouteMethod
 from superset.models.slice import Slice
+from superset.typing import FlaskResponse
 from superset.utils import core as utils
-from superset.views.base import check_ownership, DeleteMixin, SupersetModelView
+from superset.views.base import (
+    check_ownership,
+    common_bootstrap_payload,
+    DeleteMixin,
+    SupersetModelView,
+)
 from superset.views.chart.mixin import SliceMixin
 
 
@@ -39,35 +45,38 @@ class SliceModelView(
         RouteMethod.API_READ,
         RouteMethod.API_DELETE,
     }
+    class_permission_name = "Chart"
+    method_permission_name = MODEL_VIEW_RW_METHOD_PERMISSION_MAP
 
-    def pre_add(self, item):
+    def pre_add(self, item: "SliceModelView") -> None:
         utils.validate_json(item.params)
 
-    def pre_update(self, item):
+    def pre_update(self, item: "SliceModelView") -> None:
         utils.validate_json(item.params)
         check_ownership(item)
 
-    def pre_delete(self, item):
+    def pre_delete(self, item: "SliceModelView") -> None:
         check_ownership(item)
 
     @expose("/add", methods=["GET", "POST"])
     @has_access
-    def add(self):
-        datasources = ConnectorRegistry.get_all_datasources(db.session)
+    def add(self) -> FlaskResponse:
         datasources = [
-            {"value": str(d.id) + "__" + d.type, "label": repr(d)} for d in datasources
+            {"value": str(d.id) + "__" + d.type, "label": repr(d)}
+            for d in ConnectorRegistry.get_all_datasources(db.session)
         ]
+        payload = {
+            "datasources": sorted(datasources, key=lambda d: d["label"]),
+            "common": common_bootstrap_payload(),
+        }
         return self.render_template(
-            "superset/add_slice.html",
-            bootstrap_data=json.dumps(
-                {"datasources": sorted(datasources, key=lambda d: d["label"])}
-            ),
+            "superset/add_slice.html", bootstrap_data=json.dumps(payload)
         )
 
     @expose("/list/")
     @has_access
-    def list(self):
-        if not app.config["ENABLE_REACT_CRUD_VIEWS"]:
+    def list(self) -> FlaskResponse:
+        if not is_feature_enabled("ENABLE_REACT_CRUD_VIEWS"):
             return super().list()
 
         return super().render_app_template()
@@ -83,6 +92,7 @@ class SliceAsync(SliceModelView):  # pylint: disable=too-many-ancestors
         "creator",
         "datasource_id",
         "datasource_link",
+        "datasource_url",
         "datasource_name_text",
         "datasource_type",
         "description",

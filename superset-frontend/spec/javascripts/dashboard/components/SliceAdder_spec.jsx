@@ -22,8 +22,8 @@ import sinon from 'sinon';
 
 import { List } from 'react-virtualized';
 
-import SliceAdder from '../../../../src/dashboard/components/SliceAdder';
-import { sliceEntitiesForDashboard as mockSliceEntities } from '../fixtures/mockSliceEntities';
+import SliceAdder from 'src/dashboard/components/SliceAdder';
+import { sliceEntitiesForDashboard as mockSliceEntities } from 'spec/fixtures/mockSliceEntities';
 
 describe('SliceAdder', () => {
   const mockEvent = {
@@ -74,7 +74,7 @@ describe('SliceAdder', () => {
   it('render List', () => {
     const wrapper = shallow(<SliceAdder {...props} />);
     wrapper.setState({ filteredSlices: Object.values(props.slices) });
-    expect(wrapper.find(List)).toHaveLength(1);
+    expect(wrapper.find(List)).toExist();
   });
 
   it('render error', () => {
@@ -97,7 +97,7 @@ describe('SliceAdder', () => {
     props.fetchAllSlices.restore();
   });
 
-  describe('componentWillReceiveProps', () => {
+  describe('UNSAFE_componentWillReceiveProps', () => {
     let wrapper;
     beforeEach(() => {
       wrapper = shallow(<SliceAdder {...props} />);

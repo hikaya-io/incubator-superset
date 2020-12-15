@@ -20,8 +20,8 @@ import React from 'react';
 import { createStore, compose, applyMiddleware } from 'redux';
 import { Provider } from 'react-redux';
 import thunkMiddleware from 'redux-thunk';
-import { hot } from 'react-hot-loader';
-
+import { hot } from 'react-hot-loader/root';
+import { supersetTheme, ThemeProvider } from '@superset-ui/core';
 import {
   initFeatureFlags,
   isFeatureEnabled,
@@ -46,7 +46,9 @@ setupApp();
 
 const appContainer = document.getElementById('app');
 const bootstrapData = JSON.parse(appContainer.getAttribute('data-bootstrap'));
+
 initFeatureFlags(bootstrapData.common.feature_flags);
+
 const initialState = getInitialState(bootstrapData);
 const sqlLabPersistStateConfig = {
   paths: ['sqlLab'],
@@ -59,7 +61,6 @@ const sqlLabPersistStateConfig = {
         // it caused configurations passed from server-side got override.
         // see PR 6257 for details
         delete state[path].common; // eslint-disable-line no-param-reassign
-
         if (path === 'sqlLab') {
           subset[path] = {
             ...state[path],
@@ -108,8 +109,10 @@ if (sqlLabMenu) {
 
 const Application = () => (
   <Provider store={store}>
-    <App />
+    <ThemeProvider theme={supersetTheme}>
+      <App />
+    </ThemeProvider>
   </Provider>
 );
 
-export default hot(module)(Application);
+export default hot(Application);

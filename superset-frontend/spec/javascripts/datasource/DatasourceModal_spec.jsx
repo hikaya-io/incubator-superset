@@ -17,64 +17,131 @@
  * under the License.
  */
 import React from 'react';
-import { Modal } from 'react-bootstrap';
+import { act } from 'react-dom/test-utils';
 import configureStore from 'redux-mock-store';
-import { shallow } from 'enzyme';
+import { mount } from 'enzyme';
+import { Provider } from 'react-redux';
 import fetchMock from 'fetch-mock';
 import thunk from 'redux-thunk';
 import sinon from 'sinon';
+import { supersetTheme, ThemeProvider } from '@superset-ui/core';
 
-import DatasourceModal from '../../../src/datasource/DatasourceModal';
-import DatasourceEditor from '../../../src/datasource/DatasourceEditor';
-import mockDatasource from '../../fixtures/mockDatasource';
+import waitForComponentToPaint from 'spec/helpers/waitForComponentToPaint';
+import Modal from 'src/common/components/Modal';
+import DatasourceModal from 'src/datasource/DatasourceModal';
+import DatasourceEditor from 'src/datasource/DatasourceEditor';
+import * as featureFlags from 'src/featureFlags';
+import mockDatasource from 'spec/fixtures/mockDatasource';
 
-const props = {
-  datasource: mockDatasource['7__table'],
+const mockStore = configureStore([thunk]);
+const store = mockStore({});
+const datasource = mockDatasource['7__table'];
+
+const SAVE_ENDPOINT = 'glob:*/api/v1/dataset/7';
+const SAVE_PAYLOAD = { new: 'data' };
+
+const mockedProps = {
+  datasource,
   addSuccessToast: () => {},
   addDangerToast: () => {},
   onChange: () => {},
-  show: true,
   onHide: () => {},
+  show: true,
   onDatasourceSave: sinon.spy(),
 };
 
-const SAVE_ENDPOINT = 'glob:*/datasource/save/';
-const SAVE_PAYLOAD = { new: 'data' };
+async function mountAndWait(props = mockedProps) {
+  const mounted = mount(
+    <Provider store={store}>
+      <DatasourceModal {...props} />
+    </Provider>,
+    {
+      wrappingComponent: ThemeProvider,
+      wrappingComponentProps: { theme: supersetTheme },
+    },
+  );
+  await waitForComponentToPaint(mounted);
+
+  return mounted;
+}
 
 describe('DatasourceModal', () => {
-  const mockStore = configureStore([thunk]);
-  const store = mockStore({});
-  fetchMock.post(SAVE_ENDPOINT, SAVE_PAYLOAD);
-
   let wrapper;
-  let el;
-  let inst;
-
-  beforeEach(() => {
-    el = <DatasourceModal {...props} />;
-    wrapper = shallow(el, { context: { store } }).dive();
-    inst = wrapper.instance();
+  let isFeatureEnabledMock;
+  beforeEach(async () => {
+    isFeatureEnabledMock = jest
+      .spyOn(featureFlags, 'isFeatureEnabled')
+      .mockReturnValue(true);
+    fetchMock.reset();
+    wrapper = await mountAndWait();
   });
 
-  it('is valid', () => {
-    expect(React.isValidElement(el)).toBe(true);
+  afterAll(() => {
+    isFeatureEnabledMock.restore();
+  });
+
+  it('renders', () => {
+    expect(wrapper.find(DatasourceModal)).toExist();
   });
 
   it('renders a Modal', () => {
-    expect(wrapper.find(Modal)).toHaveLength(1);
+    expect(wrapper.find(Modal)).toExist();
   });
 
   it('renders a DatasourceEditor', () => {
-    expect(wrapper.find(DatasourceEditor)).toHaveLength(1);
+    expect(wrapper.find(DatasourceEditor)).toExist();
   });
 
-  it('saves on confirm', done => {
-    inst.onConfirmSave();
-    setTimeout(() => {
-      expect(fetchMock.calls(SAVE_ENDPOINT)).toHaveLength(1);
-      expect(props.onDatasourceSave.getCall(0).args[0]).toEqual(SAVE_PAYLOAD);
-      fetchMock.reset();
-      done();
-    }, 0);
+  it('saves on confirm', async () => {
+    const callsP = fetchMock.post(SAVE_ENDPOINT, SAVE_PAYLOAD);
+    act(() => {
+      wrapper
+        .find('button[data-test="datasource-modal-save"]')
+        .props()
+        .onClick();
+    });
+    await waitForComponentToPaint(wrapper);
+    act(() => {
+      const okButton = wrapper.find(
+        '.ant-modal-confirm .ant-modal-confirm-btns .ant-btn-primary',
+      );
+      okButton.simulate('click');
+    });
+    await waitForComponentToPaint(wrapper);
+    const expected = ['http://localhost/datasource/save/'];
+    expect(callsP._calls.map(call => call[0])).toEqual(
+      expected,
+    ); /* eslint no-underscore-dangle: 0 */
+  });
+
+  it('renders a legacy data source btn', () => {
+    expect(
+      wrapper.find('button[data-test="datasource-modal-legacy-edit"]'),
+    ).toExist();
+  });
+});
+
+describe('DatasourceModal without legacy data btn', () => {
+  let wrapper;
+  let isFeatureEnabledMock;
+  beforeEach(async () => {
+    isFeatureEnabledMock = jest
+      .spyOn(featureFlags, 'isFeatureEnabled')
+      .mockReturnValue(false);
+    fetchMock.reset();
+    wrapper = await mountAndWait();
+  });
+
+  afterAll(() => {
+    isFeatureEnabledMock.restore();
+  });
+
+  it('hides legacy data source btn', () => {
+    isFeatureEnabledMock = jest
+      .spyOn(featureFlags, 'isFeatureEnabled')
+      .mockReturnValue(false);
+    expect(
+      wrapper.find('button[data-test="datasource-modal-legacy-edit"]'),
+    ).not.toExist();
   });
 });

@@ -20,13 +20,11 @@
 import React from 'react';
 import { shallow } from 'enzyme';
 
-import FilterDefinitionOption from '../../../../src/explore/components/FilterDefinitionOption';
-import ColumnOption from '../../../../src/components/ColumnOption';
-import AdhocMetricStaticOption from '../../../../src/explore/components/AdhocMetricStaticOption';
-import AdhocMetric, {
-  EXPRESSION_TYPES,
-} from '../../../../src/explore/AdhocMetric';
-import { AGGREGATES } from '../../../../src/explore/constants';
+import { ColumnOption } from '@superset-ui/chart-controls';
+import FilterDefinitionOption from 'src/explore/components/FilterDefinitionOption';
+import AdhocMetricStaticOption from 'src/explore/components/AdhocMetricStaticOption';
+import AdhocMetric, { EXPRESSION_TYPES } from 'src/explore/AdhocMetric';
+import { AGGREGATES } from 'src/explore/constants';
 
 const sumValueAdhocMetric = new AdhocMetric({
   expressionType: EXPRESSION_TYPES.SIMPLE,
@@ -39,14 +37,14 @@ describe('FilterDefinitionOption', () => {
     const wrapper = shallow(
       <FilterDefinitionOption option={{ column_name: 'a_column' }} />,
     );
-    expect(wrapper.find(ColumnOption)).toHaveLength(1);
+    expect(wrapper.find(ColumnOption)).toExist();
   });
 
   it('renders a AdhocMetricStaticOption given an adhoc metric', () => {
     const wrapper = shallow(
       <FilterDefinitionOption option={sumValueAdhocMetric} />,
     );
-    expect(wrapper.find(AdhocMetricStaticOption)).toHaveLength(1);
+    expect(wrapper.find(AdhocMetricStaticOption)).toExist();
   });
 
   it('renders the metric name given a saved metric', () => {

@@ -19,12 +19,12 @@
 /* eslint-disable no-unused-expressions */
 import React from 'react';
 import { shallow } from 'enzyme';
+import { MetricOption } from '@superset-ui/chart-controls';
 
-import MetricDefinitionValue from '../../../../src/explore/components/MetricDefinitionValue';
-import MetricOption from '../../../../src/components/MetricOption';
-import AdhocMetricOption from '../../../../src/explore/components/AdhocMetricOption';
-import AdhocMetric from '../../../../src/explore/AdhocMetric';
-import { AGGREGATES } from '../../../../src/explore/constants';
+import MetricDefinitionValue from 'src/explore/components/MetricDefinitionValue';
+import AdhocMetricOption from 'src/explore/components/AdhocMetricOption';
+import AdhocMetric from 'src/explore/AdhocMetric';
+import { AGGREGATES } from 'src/explore/constants';
 
 const sumValueAdhocMetric = new AdhocMetric({
   column: { type: 'DOUBLE', column_name: 'value' },
@@ -36,7 +36,7 @@ describe('MetricDefinitionValue', () => {
     const wrapper = shallow(
       <MetricDefinitionValue option={{ metric_name: 'a_saved_metric' }} />,
     );
-    expect(wrapper.find(MetricOption)).toHaveLength(1);
+    expect(wrapper.find(MetricOption)).toExist();
   });
 
   it('renders an AdhocMetricOption given an adhoc metric', () => {
@@ -46,6 +46,6 @@ describe('MetricDefinitionValue', () => {
         option={sumValueAdhocMetric}
       />,
     );
-    expect(wrapper.find(AdhocMetricOption)).toHaveLength(1);
+    expect(wrapper.find(AdhocMetricOption)).toExist();
   });
 });

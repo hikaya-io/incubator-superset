@@ -18,8 +18,9 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Label, Panel } from 'react-bootstrap';
+import { Panel } from 'react-bootstrap';
 
+import Label from 'src/components/Label';
 import TextControl from './TextControl';
 import MetricsControl from './MetricsControl';
 import ControlHeader from '../ControlHeader';
@@ -65,6 +66,7 @@ export default class FixedOrMetricControl extends React.Component {
       metricValue: type === controlTypes.metric ? value : null,
     };
   }
+
   onChange() {
     this.props.onChange({
       type: this.state.type,
@@ -74,21 +76,23 @@ export default class FixedOrMetricControl extends React.Component {
           : this.state.metricValue,
     });
   }
+
   setType(type) {
     this.setState({ type }, this.onChange);
   }
+
   setFixedValue(fixedValue) {
     this.setState({ fixedValue }, this.onChange);
   }
+
   setMetric(metricValue) {
     this.setState({ metricValue }, this.onChange);
   }
 
   toggle() {
-    const expanded = !this.state.expanded;
-    this.setState({
-      expanded,
-    });
+    this.setState(prevState => ({
+      expanded: !prevState.expanded,
+    }));
   }
 
   render() {
@@ -97,10 +101,13 @@ export default class FixedOrMetricControl extends React.Component {
     const columns = this.props.datasource
       ? this.props.datasource.columns
       : null;
+    const metrics = this.props.datasource
+      ? this.props.datasource.metrics
+      : null;
     return (
       <div>
         <ControlHeader {...this.props} />
-        <Label style={{ cursor: 'pointer' }} onClick={this.toggle}>
+        <Label onClick={this.toggle}>
           {this.state.type === controlTypes.fixed && (
             <span>{this.state.fixedValue}</span>
           )}
@@ -117,43 +124,49 @@ export default class FixedOrMetricControl extends React.Component {
           className="panel-spreaded"
           collapsible
           expanded={this.state.expanded}
+          onToggle={this.toggle}
         >
-          <div className="well">
-            <PopoverSection
-              title="Fixed"
-              isSelected={type === controlTypes.fixed}
-              onSelect={() => {
-                this.setType(controlTypes.fixed);
-              }}
-            >
-              <TextControl
-                isFloat
-                onChange={this.setFixedValue}
-                onFocus={() => {
-                  this.setType(controlTypes.fixed);
-                }}
-                value={this.state.fixedValue}
-              />
-            </PopoverSection>
-            <PopoverSection
-              title="Based on a metric"
-              isSelected={type === controlTypes.metric}
-              onSelect={() => {
-                this.setType(controlTypes.metric);
-              }}
-            >
-              <MetricsControl
-                name="metric"
-                columns={columns}
-                multi={false}
-                onFocus={() => {
-                  this.setType(controlTypes.metric);
-                }}
-                onChange={this.setMetric}
-                value={this.state.metricValue}
-              />
-            </PopoverSection>
-          </div>
+          <Panel.Collapse>
+            <Panel.Body>
+              <div className="well">
+                <PopoverSection
+                  title="Fixed"
+                  isSelected={type === controlTypes.fixed}
+                  onSelect={() => {
+                    this.setType(controlTypes.fixed);
+                  }}
+                >
+                  <TextControl
+                    isFloat
+                    onChange={this.setFixedValue}
+                    onFocus={() => {
+                      this.setType(controlTypes.fixed);
+                    }}
+                    value={this.state.fixedValue}
+                  />
+                </PopoverSection>
+                <PopoverSection
+                  title="Based on a metric"
+                  isSelected={type === controlTypes.metric}
+                  onSelect={() => {
+                    this.setType(controlTypes.metric);
+                  }}
+                >
+                  <MetricsControl
+                    name="metric"
+                    columns={columns}
+                    savedMetrics={metrics}
+                    multi={false}
+                    onFocus={() => {
+                      this.setType(controlTypes.metric);
+                    }}
+                    onChange={this.setMetric}
+                    value={this.state.metricValue}
+                  />
+                </PopoverSection>
+              </div>
+            </Panel.Body>
+          </Panel.Collapse>
         </Panel>
       </div>
     );

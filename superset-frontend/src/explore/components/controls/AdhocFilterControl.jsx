@@ -18,9 +18,10 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
-import VirtualizedSelect from 'react-virtualized-select';
 
-import { t } from '@superset-ui/translation';
+import { t, logging, SupersetClient } from '@superset-ui/core';
+
+import Select from 'src/components/Select';
 import ControlHeader from '../ControlHeader';
 import adhocFilterType from '../../propTypes/adhocFilterType';
 import adhocMetricType from '../../propTypes/adhocMetricType';
@@ -29,8 +30,6 @@ import columnType from '../../propTypes/columnType';
 import AdhocFilter, { CLAUSES, EXPRESSION_TYPES } from '../../AdhocFilter';
 import AdhocMetric from '../../AdhocMetric';
 import { OPERATORS } from '../../constants';
-import VirtualizedRendererWrap from '../../../components/VirtualizedRendererWrap';
-import OnPasteSelect from '../../../components/OnPasteSelect';
 import AdhocFilterOption from '../AdhocFilterOption';
 import FilterDefinitionOption from '../FilterDefinitionOption';
 
@@ -47,6 +46,7 @@ const propTypes = {
       PropTypes.oneOfType([PropTypes.string, adhocMetricType]),
     ),
   }),
+  isLoading: PropTypes.bool,
 };
 
 const defaultProps = {
@@ -73,9 +73,7 @@ export default class AdhocFilterControl extends React.Component {
       isDictionaryForAdhocFilter(filter) ? new AdhocFilter(filter) : filter,
     );
 
-    this.optionRenderer = VirtualizedRendererWrap(option => (
-      <FilterDefinitionOption option={option} />
-    ));
+    this.optionRenderer = option => <FilterDefinitionOption option={option} />;
     this.valueRenderer = adhocFilter => (
       <AdhocFilterOption
         adhocFilter={adhocFilter}
@@ -88,6 +86,50 @@ export default class AdhocFilterControl extends React.Component {
       values: filters,
       options: this.optionsForSelect(this.props),
     };
+  }
+
+  componentDidMount() {
+    const { datasource } = this.props;
+    if (datasource && datasource.type === 'table') {
+      const dbId = datasource.database?.id;
+      const {
+        datasource_name: name,
+        schema,
+        is_sqllab_view: isSqllabView,
+      } = datasource;
+
+      if (!isSqllabView && dbId && name && schema) {
+        SupersetClient.get({
+          endpoint: `/superset/extra_table_metadata/${dbId}/${name}/${schema}/`,
+        })
+          .then(({ json }) => {
+            if (json && json.partitions) {
+              const { partitions } = json;
+              // for now only show latest_partition option
+              // when table datasource has only 1 partition key.
+              if (
+                partitions &&
+                partitions.cols &&
+                Object.keys(partitions.cols).length === 1
+              ) {
+                const partitionColumn = partitions.cols[0];
+                this.valueRenderer = adhocFilter => (
+                  <AdhocFilterOption
+                    adhocFilter={adhocFilter}
+                    onFilterEdit={this.onFilterEdit}
+                    options={this.state.options}
+                    datasource={this.props.datasource}
+                    partitionColumn={partitionColumn}
+                  />
+                );
+              }
+            }
+          })
+          .catch(error => {
+            logging.error('fetch extra_table_metadata:', error.statusText);
+          });
+      }
+    }
   }
 
   UNSAFE_componentWillReceiveProps(nextProps) {
@@ -118,52 +160,61 @@ export default class AdhocFilterControl extends React.Component {
   }
 
   onChange(opts) {
-    this.props.onChange(
-      opts
-        .map(option => {
-          if (option.saved_metric_name) {
-            return new AdhocFilter({
-              expressionType:
-                this.props.datasource.type === 'druid'
-                  ? EXPRESSION_TYPES.SIMPLE
-                  : EXPRESSION_TYPES.SQL,
-              subject:
-                this.props.datasource.type === 'druid'
-                  ? option.saved_metric_name
-                  : this.getMetricExpression(option.saved_metric_name),
-              operator: OPERATORS['>'],
-              comparator: 0,
-              clause: CLAUSES.HAVING,
-            });
-          } else if (option.label) {
-            return new AdhocFilter({
-              expressionType:
-                this.props.datasource.type === 'druid'
-                  ? EXPRESSION_TYPES.SIMPLE
-                  : EXPRESSION_TYPES.SQL,
-              subject:
-                this.props.datasource.type === 'druid'
-                  ? option.label
-                  : new AdhocMetric(option).translateToSql(),
-              operator: OPERATORS['>'],
-              comparator: 0,
-              clause: CLAUSES.HAVING,
-            });
-          } else if (option.column_name) {
-            return new AdhocFilter({
-              expressionType: EXPRESSION_TYPES.SIMPLE,
-              subject: option.column_name,
-              operator: OPERATORS['=='],
-              comparator: '',
-              clause: CLAUSES.WHERE,
-            });
-          } else if (option instanceof AdhocFilter) {
-            return option;
-          }
-          return null;
-        })
-        .filter(option => option),
-    );
+    const options = (opts || [])
+      .map(option => {
+        // already a AdhocFilter, skip
+        if (option instanceof AdhocFilter) {
+          return option;
+        }
+        // via datasource saved metric
+        if (option.saved_metric_name) {
+          return new AdhocFilter({
+            expressionType:
+              this.props.datasource.type === 'druid'
+                ? EXPRESSION_TYPES.SIMPLE
+                : EXPRESSION_TYPES.SQL,
+            subject:
+              this.props.datasource.type === 'druid'
+                ? option.saved_metric_name
+                : this.getMetricExpression(option.saved_metric_name),
+            operator: OPERATORS['>'],
+            comparator: 0,
+            clause: CLAUSES.HAVING,
+            isNew: true,
+          });
+        }
+        // has a custom label, meaning it's custom column
+        if (option.label) {
+          return new AdhocFilter({
+            expressionType:
+              this.props.datasource.type === 'druid'
+                ? EXPRESSION_TYPES.SIMPLE
+                : EXPRESSION_TYPES.SQL,
+            subject:
+              this.props.datasource.type === 'druid'
+                ? option.label
+                : new AdhocMetric(option).translateToSql(),
+            operator: OPERATORS['>'],
+            comparator: 0,
+            clause: CLAUSES.HAVING,
+            isNew: true,
+          });
+        }
+        // add a new filter item
+        if (option.column_name) {
+          return new AdhocFilter({
+            expressionType: EXPRESSION_TYPES.SIMPLE,
+            subject: option.column_name,
+            operator: OPERATORS['=='],
+            comparator: '',
+            clause: CLAUSES.WHERE,
+            isNew: true,
+          });
+        }
+        return null;
+      })
+      .filter(option => option);
+    this.props.onChange(options);
   }
 
   getMetricExpression(savedMetricName) {
@@ -194,12 +245,12 @@ export default class AdhocFilterControl extends React.Component {
         } else if (option.column_name) {
           results.push({
             ...option,
-            filterOptionName: '_col_' + option.column_name,
+            filterOptionName: `_col_${option.column_name}`,
           });
         } else if (option instanceof AdhocMetric) {
           results.push({
             ...option,
-            filterOptionName: '_adhocmetric_' + option.label,
+            filterOptionName: `_adhocmetric_${option.label}`,
           });
         }
         return results;
@@ -213,12 +264,13 @@ export default class AdhocFilterControl extends React.Component {
 
   render() {
     return (
-      <div className="metrics-select">
+      <div className="metrics-select" data-test="adhoc-filter-control">
         <ControlHeader {...this.props} />
-        <OnPasteSelect
-          multi
+        <Select
+          isMulti
+          isLoading={this.props.isLoading}
           name={`select-${this.props.name}`}
-          placeholder={t('choose a column or metric')}
+          placeholder={t('choose one or more columns or metrics')}
           options={this.state.options}
           value={this.state.values}
           labelKey="label"
@@ -228,7 +280,6 @@ export default class AdhocFilterControl extends React.Component {
           onChange={this.onChange}
           optionRenderer={this.optionRenderer}
           valueRenderer={this.valueRenderer}
-          selectWrap={VirtualizedSelect}
         />
       </div>
     );

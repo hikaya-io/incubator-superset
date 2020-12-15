@@ -18,15 +18,12 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
-import VirtualizedSelect from 'react-virtualized-select';
-import Select, { Creatable } from 'react-select';
-import { t } from '@superset-ui/translation';
-
-import ControlHeader from '../ControlHeader';
-import VirtualizedRendererWrap from '../../../components/VirtualizedRendererWrap';
-import OnPasteSelect from '../../../components/OnPasteSelect';
+import { t } from '@superset-ui/core';
+import { Select, CreatableSelect, OnPasteSelect } from 'src/components/Select';
+import ControlHeader from 'src/explore/components/ControlHeader';
 
 const propTypes = {
+  autoFocus: PropTypes.bool,
   choices: PropTypes.array,
   clearable: PropTypes.bool,
   description: PropTypes.string,
@@ -35,6 +32,7 @@ const propTypes = {
   isLoading: PropTypes.bool,
   label: PropTypes.string,
   multi: PropTypes.bool,
+  isMulti: PropTypes.bool,
   allowAll: PropTypes.bool,
   name: PropTypes.string.isRequired,
   onChange: PropTypes.func,
@@ -51,13 +49,17 @@ const propTypes = {
   options: PropTypes.array,
   placeholder: PropTypes.string,
   noResultsText: PropTypes.string,
-  refFunc: PropTypes.func,
+  selectRef: PropTypes.func,
   filterOption: PropTypes.func,
   promptTextCreator: PropTypes.func,
   commaChoosesOption: PropTypes.bool,
+  menuPortalTarget: PropTypes.element,
+  menuPosition: PropTypes.string,
+  menuPlacement: PropTypes.string,
 };
 
 const defaultProps = {
+  autoFocus: false,
   choices: [],
   clearable: true,
   description: null,
@@ -69,8 +71,6 @@ const defaultProps = {
   onChange: () => {},
   onFocus: () => {},
   showHeader: true,
-  optionRenderer: opt => opt.label,
-  valueRenderer: opt => opt.label,
   valueKey: 'value',
   noResultsText: t('No results found'),
   promptTextCreator: label => `Create Option ${label}`,
@@ -84,6 +84,9 @@ export default class SelectControl extends React.PureComponent {
     this.state = { options: this.getOptions(props) };
     this.onChange = this.onChange.bind(this);
     this.createMetaSelectAllOption = this.createMetaSelectAllOption.bind(this);
+    this.select = null; // pointer to the react-select instance
+    this.getSelectRef = this.getSelectRef.bind(this);
+    this.handleKeyDownForCreate = this.handleKeyDownForCreate.bind(this);
   }
 
   UNSAFE_componentWillReceiveProps(nextProps) {
@@ -96,70 +99,71 @@ export default class SelectControl extends React.PureComponent {
     }
   }
 
+  // Beware: This is acting like an on-click instead of an on-change
+  // (firing every time user chooses vs firing only if a new option is chosen).
   onChange(opt) {
-    let optionValue = null;
+    let optionValue = this.props.multi ? [] : null;
     if (opt) {
       if (this.props.multi) {
-        optionValue = [];
-        for (const o of opt) {
+        opt.forEach(o => {
+          // select all options
           if (o.meta === true) {
             optionValue = this.getOptions(this.props)
               .filter(x => !x.meta)
               .map(x => x[this.props.valueKey]);
-            break;
-          } else {
-            optionValue.push(o[this.props.valueKey]);
+            return;
           }
-        }
+          optionValue.push(o[this.props.valueKey] || o);
+        });
       } else if (opt.meta === true) {
         return;
       } else {
         optionValue = opt[this.props.valueKey];
       }
     }
+    // will eventually call `exploreReducer`: SET_FIELD_VALUE
     this.props.onChange(optionValue);
+  }
+
+  getSelectRef(instance) {
+    this.select = instance;
+    if (this.props.selectRef) {
+      this.props.selectRef(instance);
+    }
   }
 
   getOptions(props) {
     let options = [];
     if (props.options) {
       options = props.options.map(x => x);
-    } else {
+    } else if (props.choices) {
       // Accepts different formats of input
       options = props.choices.map(c => {
-        let option;
         if (Array.isArray(c)) {
-          const label = c.length > 1 ? c[1] : c[0];
-          option = { label };
-          option[props.valueKey] = c[0];
-        } else if (Object.is(c)) {
-          option = c;
-        } else {
-          option = { label: c };
-          option[props.valueKey] = c;
+          const [value, label] = c.length > 1 ? c : [c[0], c[0]];
+          return { label, [props.valueKey]: value };
         }
-        return option;
+        if (Object.is(c)) {
+          return c;
+        }
+        return { label: c, [props.valueKey]: c };
       });
     }
-    if (props.freeForm) {
-      // For FreeFormSelect, insert value into options if not exist
-      const values = options.map(c => c[props.valueKey]);
-      if (props.value) {
-        let valuesToAdd = props.value;
-        if (!Array.isArray(valuesToAdd)) {
-          valuesToAdd = [valuesToAdd];
+    // For FreeFormSelect, insert newly created values into options
+    if (props.freeForm && props.value) {
+      const existingOptionValues = new Set(options.map(c => c[props.valueKey]));
+      const selectedValues = Array.isArray(props.value)
+        ? props.value
+        : [props.value];
+      selectedValues.forEach(v => {
+        if (!existingOptionValues.has(v)) {
+          // place the newly created options at the top
+          options.unshift({ label: v, [props.valueKey]: v });
         }
-        valuesToAdd.forEach(v => {
-          if (values.indexOf(v) < 0) {
-            const toAdd = { label: v };
-            toAdd[props.valueKey] = v;
-            options.push(toAdd);
-          }
-        });
-      }
+      });
     }
     if (props.allowAll === true && props.multi === true) {
-      if (options.findIndex(o => this.isMetaSelectAllOption(o)) < 0) {
+      if (!this.optionsIncludesSelectAll(options)) {
         options.unshift(this.createMetaSelectAllOption());
       }
     } else {
@@ -168,8 +172,42 @@ export default class SelectControl extends React.PureComponent {
     return options;
   }
 
+  handleKeyDownForCreate(event) {
+    const { key } = event;
+    if (key === 'Tab' || (this.props.commaChoosesOption && key === ',')) {
+      // simulate an Enter event
+      if (this.select) {
+        this.select.onKeyDown({ ...event, key: 'Enter' });
+      }
+    }
+  }
+
   isMetaSelectAllOption(o) {
     return o.meta && o.meta === true && o.label === 'Select All';
+  }
+
+  optionsIncludesSelectAll(o) {
+    return o.findIndex(o => this.isMetaSelectAllOption(o)) >= 0;
+  }
+
+  optionsRemaining() {
+    const { options } = this.state;
+    const { value } = this.props;
+    // if select is multi/value is array, we show the options not selected
+    let remainingOptions = Array.isArray(value)
+      ? options.length - value.length
+      : options.length;
+    if (this.optionsIncludesSelectAll(options)) {
+      remainingOptions -= 1;
+    }
+    return remainingOptions;
+  }
+
+  createPlaceholder() {
+    const optionsRemaining = this.optionsRemaining();
+    const placeholder =
+      this.props.placeholder || t('%s option(s)', optionsRemaining);
+    return optionsRemaining ? placeholder : '';
   }
 
   createMetaSelectAllOption() {
@@ -180,46 +218,71 @@ export default class SelectControl extends React.PureComponent {
 
   render() {
     //  Tab, comma or Enter will trigger a new option created for FreeFormSelect
-    const placeholder =
-      this.props.placeholder || t('%s option(s)', this.state.options.length);
+    const {
+      autoFocus,
+      clearable,
+      disabled,
+      filterOption,
+      isLoading,
+      menuPlacement,
+      menuPortalTarget,
+      menuPosition,
+      name,
+      noResultsText,
+      onFocus,
+      optionRenderer,
+      promptTextCreator,
+      value,
+      valueKey,
+      valueRenderer,
+    } = this.props;
+    const placeholder = this.createPlaceholder();
+    const isMulti = this.props.isMulti || this.props.multi;
+
     const selectProps = {
-      multi: this.props.multi,
-      name: `select-${this.props.name}`,
-      placeholder,
-      options: this.state.options,
-      value: this.props.value,
-      labelKey: 'label',
-      valueKey: this.props.valueKey,
-      autosize: false,
-      clearable: this.props.clearable,
-      isLoading: this.props.isLoading,
-      onChange: this.onChange,
-      onFocus: this.props.onFocus,
-      optionRenderer: VirtualizedRendererWrap(this.props.optionRenderer),
-      valueRenderer: this.props.valueRenderer,
-      noResultsText: this.props.noResultsText,
-      disabled: this.props.disabled,
-      refFunc: this.props.refFunc,
-      filterOption: this.props.filterOption,
-      promptTextCreator: this.props.promptTextCreator,
+      autoFocus,
+      clearable,
+      disabled,
+      filterOption,
       ignoreAccents: false,
+      isLoading,
+      isMulti,
+      labelKey: 'label',
+      menuPlacement,
+      menuPortalTarget,
+      menuPosition,
+      name: `select-${name}`,
+      noResultsText,
+      onChange: this.onChange,
+      onFocus,
+      optionRenderer,
+      options: this.state.options,
+      placeholder,
+      promptTextCreator,
+      selectRef: this.getSelectRef,
+      value,
+      valueKey,
+      valueRenderer,
     };
+
+    let SelectComponent;
     if (this.props.freeForm) {
-      selectProps.selectComponent = Creatable;
-      selectProps.shouldKeyDownEventCreateNewOption = key => {
-        const keyCode = key.keyCode;
-        if (this.props.commaChoosesOption && keyCode === 188) {
-          return true;
-        }
-        return keyCode === 9 || keyCode === 13;
-      };
+      SelectComponent = CreatableSelect;
+      // Don't create functions in `render` because React relies on shallow
+      // compare to decide weathere to rerender child components.
+      selectProps.onKeyDown = this.handleKeyDownForCreate;
     } else {
-      selectProps.selectComponent = Select;
+      SelectComponent = Select;
     }
+
     return (
       <div>
         {this.props.showHeader && <ControlHeader {...this.props} />}
-        <OnPasteSelect {...selectProps} selectWrap={VirtualizedSelect} />
+        {isMulti ? (
+          <OnPasteSelect {...selectProps} selectWrap={SelectComponent} />
+        ) : (
+          <SelectComponent {...selectProps} />
+        )}
       </div>
     );
   }

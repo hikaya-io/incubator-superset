@@ -19,21 +19,23 @@
 import PropTypes from 'prop-types';
 import React from 'react';
 import { Alert } from 'react-bootstrap';
+import { styled, logging } from '@superset-ui/core';
 
 import { isFeatureEnabled, FeatureFlag } from 'src/featureFlags';
-import { Logger, LOG_ACTIONS_RENDER_CHART_CONTAINER } from '../logger/LogUtils';
+import { Logger, LOG_ACTIONS_RENDER_CHART } from '../logger/LogUtils';
 import Loading from '../components/Loading';
 import RefreshChartOverlay from '../components/RefreshChartOverlay';
-import StackTraceMessage from '../components/StackTraceMessage';
+import ErrorMessageWithStackTrace from '../components/ErrorMessage/ErrorMessageWithStackTrace';
 import ErrorBoundary from '../components/ErrorBoundary';
 import ChartRenderer from './ChartRenderer';
-import './chart.less';
 
 const propTypes = {
   annotationData: PropTypes.object,
   actions: PropTypes.object,
   chartId: PropTypes.number.isRequired,
   datasource: PropTypes.object.isRequired,
+  // current chart is included by dashboard
+  dashboardId: PropTypes.number,
   // original selected values for FilterBox viz
   // so that FilterBox can pre-populate selected values
   // only affect UI control
@@ -47,6 +49,9 @@ const propTypes = {
   timeout: PropTypes.number,
   vizType: PropTypes.string.isRequired,
   triggerRender: PropTypes.bool,
+  owners: PropTypes.arrayOf(
+    PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  ),
   // state
   chartAlert: PropTypes.string,
   chartStatus: PropTypes.string,
@@ -71,7 +76,18 @@ const defaultProps = {
   initialValues: BLANK,
   setControlValue() {},
   triggerRender: false,
+  dashboardId: null,
+  chartStackTrace: null,
 };
+
+const Styles = styled.div`
+  position: relative;
+  height: 100%;
+  .chart-tooltip {
+    opacity: 0.75;
+    font-size: ${({ theme }) => theme.typography.sizes.s}px;
+  }
+`;
 
 class Chart extends React.PureComponent {
   constructor(props) {
@@ -101,6 +117,7 @@ class Chart extends React.PureComponent {
         false,
         this.props.timeout,
         this.props.chartId,
+        this.props.dashboardId,
       );
     } else {
       // Create chart with POST request
@@ -109,20 +126,21 @@ class Chart extends React.PureComponent {
         false,
         this.props.timeout,
         this.props.chartId,
+        this.props.dashboardId,
       );
     }
   }
 
   handleRenderContainerFailure(error, info) {
     const { actions, chartId } = this.props;
-    console.warn(error); // eslint-disable-line
+    logging.warn(error);
     actions.chartRenderingFailed(
       error.toString(),
       chartId,
       info ? info.componentStack : null,
     );
 
-    actions.logEvent(LOG_ACTIONS_RENDER_CHART_CONTAINER, {
+    actions.logEvent(LOG_ACTIONS_RENDER_CHART, {
       slice_id: chartId,
       has_err: true,
       error_details: error.toString(),
@@ -132,12 +150,29 @@ class Chart extends React.PureComponent {
     });
   }
 
-  renderStackTraceMessage() {
-    const { chartAlert, chartStackTrace, queryResponse } = this.props;
+  renderErrorMessage() {
+    const {
+      chartAlert,
+      chartStackTrace,
+      dashboardId,
+      owners,
+      queryResponse,
+    } = this.props;
+
+    const error = queryResponse?.errors?.[0];
+    if (error) {
+      const extra = error.extra || {};
+      extra.owners = owners;
+      error.extra = extra;
+    }
+    const message = chartAlert || queryResponse?.message;
     return (
-      <StackTraceMessage
-        message={chartAlert}
+      <ErrorMessageWithStackTrace
+        error={error}
+        subtitle={message}
+        copyText={message}
         link={queryResponse ? queryResponse.link : null}
+        source={dashboardId ? 'dashboard' : 'explore'}
         stackTrace={chartStackTrace}
       />
     );
@@ -156,26 +191,30 @@ class Chart extends React.PureComponent {
 
     const isLoading = chartStatus === 'loading';
 
-    // this allows <Loading /> to be positioned in the middle of the chart
-    const containerStyles = isLoading ? { height, width } : null;
     const isFaded = refreshOverlayVisible && !errorMessage;
     this.renderContainerStartTime = Logger.getTimestamp();
     if (chartStatus === 'failed') {
-      return this.renderStackTraceMessage();
+      return this.renderErrorMessage();
     }
     if (errorMessage) {
-      return <Alert bsStyle="warning">{errorMessage}</Alert>;
+      return (
+        <Alert data-test="alert-warning" bsStyle="warning">
+          {errorMessage}
+        </Alert>
+      );
     }
     return (
       <ErrorBoundary
         onError={this.handleRenderContainerFailure}
         showMessage={false}
       >
-        <div
-          className={`chart-container ${isLoading ? 'is-loading' : ''}`}
-          style={containerStyles}
-        >
-          {isLoading && <Loading size={50} />}
+        <Styles className="chart-container" data-test="chart-container">
+          <div
+            className={`slice_container ${isFaded ? ' faded' : ''}`}
+            data-test="slice-container"
+          >
+            <ChartRenderer {...this.props} data-test={this.props.vizType} />
+          </div>
 
           {!isLoading && !chartAlert && isFaded && (
             <RefreshChartOverlay
@@ -184,10 +223,9 @@ class Chart extends React.PureComponent {
               onQuery={onQuery}
             />
           )}
-          <div className={`slice_container ${isFaded ? ' faded' : ''}`}>
-            <ChartRenderer {...this.props} />
-          </div>
-        </div>
+
+          {isLoading && <Loading />}
+        </Styles>
       </ErrorBoundary>
     );
   }

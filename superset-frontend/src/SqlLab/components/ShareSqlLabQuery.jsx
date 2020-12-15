@@ -18,14 +18,14 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Popover, OverlayTrigger } from 'react-bootstrap';
-import { t } from '@superset-ui/translation';
+import Popover from 'src/common/components/Popover';
+import { t } from '@superset-ui/core';
 import { isFeatureEnabled, FeatureFlag } from 'src/featureFlags';
 
-import Button from '../../components/Button';
+import Button from 'src/components/Button';
 import CopyToClipboard from '../../components/CopyToClipboard';
 import { storeQuery } from '../../utils/common';
-import getClientErrorObject from '../../utils/getClientErrorObject';
+import { getClientErrorObject } from '../../utils/getClientErrorObject';
 import withToasts from '../../messageToasts/enhancers/withToasts';
 
 const propTypes = {
@@ -77,10 +77,9 @@ class ShareSqlLabQuery extends React.Component {
     let savedQueryToastContent;
 
     if (this.props.queryEditor.remoteId) {
-      savedQueryToastContent =
-        window.location.origin +
-        window.location.pathname +
-        `?savedQueryId=${this.props.queryEditor.remoteId}`;
+      savedQueryToastContent = `${
+        window.location.origin + window.location.pathname
+      }?savedQueryId=${this.props.queryEditor.remoteId}`;
       this.setState({ shortUrl: savedQueryToastContent });
     } else {
       savedQueryToastContent = t('Please save the query to enable sharing');
@@ -90,31 +89,29 @@ class ShareSqlLabQuery extends React.Component {
 
   renderPopover() {
     return (
-      <Popover id="sqllab-shareurl-popover">
+      <div id="sqllab-shareurl-popover">
         <CopyToClipboard
           text={this.state.shortUrl || t('Loading ...')}
           copyNode={
             <i className="fa fa-clipboard" title={t('Copy to clipboard')} />
           }
         />
-      </Popover>
+      </div>
     );
   }
 
   render() {
     return (
-      <OverlayTrigger
+      <Popover
         trigger="click"
         placement="top"
-        onEnter={this.getCopyUrl}
-        rootClose
-        shouldUpdatePosition
-        overlay={this.renderPopover()}
+        onClick={this.getCopyUrl}
+        content={this.renderPopover()}
       >
-        <Button bsSize="small" className="toggleSave">
-          <i className="fa fa-clipboard" /> {t('Share Query')}
+        <Button buttonSize="small">
+          <i className="fa fa-share" /> {t('Share')}
         </Button>
-      </OverlayTrigger>
+      </Popover>
     );
   }
 }

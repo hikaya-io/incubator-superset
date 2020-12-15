@@ -39,11 +39,6 @@ body {
   padding: 0px;
 }
 
-.loading {
-  width: 50px;
-  margin-top: 15px;
-}
-
 .pane-cell {
   padding: 10px;
   overflow: auto;
@@ -51,12 +46,12 @@ body {
   height: 100%;
 }
 
-.tab-content {
+.ant-tabs-content {
   height: 100%;
   position: relative;
   background-color: @lightest;
 
-  > .tab-pane {
+  > .ant-tabs-tabpane {
     position: absolute;
     top: 0;
     right: 0;
@@ -139,7 +134,7 @@ div.Workspace {
 
 .sql-toolbar {
   padding: 10px 10px 5px 10px;
-  background-color: @gray-bg;
+  background-color: @lightest;
   display: flex;
   justify-content: space-between;
   border: 1px solid @gray-light;
@@ -158,6 +153,7 @@ div.Workspace {
 
       &:last-child {
         margin-right: 0;
+        font-feature-settings: 'kern' 1, 'tnum' 1;
       }
     }
   }
@@ -181,11 +177,9 @@ div.Workspace {
 
   display: inline-block;
   background-color: @gray-light;
-  line-height: 8px; // set specifically for closing 'x'
   text-align: center;
   vertical-align: middle;
   font-size: @font-size-m;
-  margin-top: -3px;
   font-weight: @font-weight-bold;
 }
 
@@ -245,10 +239,6 @@ div.Workspace {
   .SouthPane {
     height: 100%;
   }
-
-  .scrollbar-container {
-    overflow: auto;
-  }
 }
 
 .SqlEditorTabs li {
@@ -258,11 +248,54 @@ div.Workspace {
 
   .ddbtn-tab {
     font-size: inherit;
-    font-weight: @font-weight-bold;
+    color: black;
 
     &:active {
       background: none;
     }
+
+    svg {
+      vertical-align: middle;
+    }
+  }
+
+  .dropdown.btn-group.btn-group-sm {
+    width: 3px;
+    height: 3px;
+    border-radius: 1.5px;
+    background: #bababa;
+    margin-right: 8px;
+    font-weight: @font-weight-normal;
+    display: inline-flex;
+
+    &:hover {
+      background-color: @primary-color;
+
+      &:before,
+      &:after {
+        background-color: @primary-color;
+      }
+    }
+
+    &:before,
+    &:after {
+      position: absolute;
+      content: ' ';
+      width: 3px;
+      height: 3px;
+      border-radius: 1.5px;
+      background-color: #bababa;
+    }
+    &:before {
+      transform: translateY(-5px);
+    }
+    &:after {
+      transform: translateY(5px);
+    }
+  }
+
+  ul.dropdown-menu {
+    margin-top: 10px;
   }
 
   .dropdown-toggle {
@@ -277,14 +310,15 @@ div.Workspace {
   padding: 10px;
 
   .schemaPane {
-    flex: 0 0 300px;
-    max-width: 300px;
+    flex: 0 0 400px;
+    max-width: 400px;
     transition: transform @timing-normal ease-in-out;
   }
 
   .queryPane {
     flex: 1 1 auto;
     padding-left: 10px;
+    overflow: auto;
   }
 
   .schemaPane-enter-done,
@@ -333,11 +367,6 @@ div.Workspace {
     border-bottom: 1px solid @gray-bg;
     margin: 15px 0;
   }
-
-  .scrollbar-container {
-    flex: 1 1 auto;
-    overflow: auto;
-  }
 }
 
 .popover {
@@ -359,29 +388,51 @@ div.tablePopover {
 }
 
 .ResultSetControls {
+  display: flex;
+  justify-content: space-between;
   padding: 8px 0;
+  position: fixed;
 }
 
-.ace_editor {
+.ResultSetButtons {
+  display: grid;
+  grid-auto-flow: column;
+  grid-gap: 4px;
+  padding-right: 8px;
+}
+
+.result-set-error-message {
+  padding-top: 16px;
+}
+
+.filterable-table-container {
+  margin-top: 48px;
+}
+
+.ace_editor.ace_editor {
+  //double class is better than !important
   border: 1px solid @gray-light;
-}
-
-.ace_editor,
-.ace_editor div {
+  font-feature-settings: @font-feature-settings;
   font-family: @font-family-monospace;
+
+  &.ace_autocomplete {
+    // Use !important because Ace Editor applies extra CSS at the last second
+    // when opening the autocomplete.
+    width: 520px !important;
+  }
 }
 
-.Select-menu-outer {
+.Select__menu-outer {
   min-width: 100%;
   width: inherit;
   z-index: @z-index-dropdown;
 }
 
-.Select-clear {
+.Select__clear-indicator {
   margin-top: -2px;
 }
 
-.Select-arrow {
+.Select__arrow {
   margin-top: 5px;
 }
 
@@ -400,6 +451,24 @@ div.tablePopover {
 
   .ws-el-controls {
     margin-right: -0.3em;
+    display: flex;
+  }
+
+  .header-container {
+    display: flex;
+
+    .table-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 16px;
+    }
+
+    .header-right-side {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+    }
   }
 }
 
@@ -407,11 +476,11 @@ div.tablePopover {
   display: inline-block;
 }
 
-.ResultsModal .modal-body {
-  min-height: 600px;
+.ResultsModal .ant-modal-body {
+  min-height: 560px;
 }
 
-.modal-body {
+.ant-modal-body {
   overflow: auto;
 }
 
@@ -424,19 +493,6 @@ a.Link {
   margin: 3px 5px;
 }
 
-.tooltip pre {
-  background: transparent;
-  border: none;
-  text-align: left;
-  color: @lightest;
-  font-size: @font-size-xs;
-}
-
-.tooltip-inner {
-  max-width: 500px;
-  word-wrap: break-word;
-}
-
 .SouthPane {
   width: 100%;
 
@@ -446,7 +502,7 @@ a.Link {
     flex-direction: column;
   }
 
-  .tab-pane {
+  .ant-tabs-tabpane {
     overflow-y: auto; // scroll the query history pane
   }
 }
@@ -455,6 +511,8 @@ a.Link {
   padding: 0;
   border: none;
   background: none;
+  position: relative;
+  top: 2px;
 
   &:focus {
     outline: 0;

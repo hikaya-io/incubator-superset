@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { t } from '@superset-ui/translation';
+import { t, validateNonEmpty } from '@superset-ui/core';
 
 export default {
   controlPanelSections: [
@@ -28,20 +28,37 @@ export default {
         ['adhoc_filters'],
         ['groupby'],
         ['limit'],
-        ['column_collection'],
-        ['url'],
+        [
+          {
+            name: 'column_collection',
+            config: {
+              type: 'CollectionControl',
+              label: t('Time Series Columns'),
+              validators: [validateNonEmpty],
+              controlName: 'TimeSeriesColumnControl',
+            },
+          },
+        ],
+        [
+          {
+            name: 'url',
+            config: {
+              type: 'TextControl',
+              label: t('URL'),
+              description: t(
+                "Templated link, it's possible to include {{ metric }} " +
+                  'or other values coming from the controls.',
+              ),
+              default: '',
+            },
+          },
+        ],
       ],
     },
   ],
   controlOverrides: {
     groupby: {
       multiple: false,
-    },
-    url: {
-      description: t(
-        "Templated link, it's possible to include {{ metric }} " +
-          'or other values coming from the controls.',
-      ),
     },
   },
   sectionOverrides: {

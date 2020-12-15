@@ -18,21 +18,25 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
-import VirtualizedSelect from 'react-virtualized-select';
-import { Creatable } from 'react-select';
-import { Button } from 'react-bootstrap';
-import { t } from '@superset-ui/translation';
+import { debounce } from 'lodash';
+import { max as d3Max } from 'd3-array';
+import { AsyncCreatableSelect, CreatableSelect } from 'src/components/Select';
+import Button from 'src/components/Button';
+import { t, styled, SupersetClient } from '@superset-ui/core';
 
-import DateFilterControl from '../../explore/components/controls/DateFilterControl';
-import ControlRow from '../../explore/components/ControlRow';
-import Control from '../../explore/components/Control';
-import controls from '../../explore/controls';
-import OnPasteSelect from '../../components/OnPasteSelect';
-import VirtualizedRendererWrap from '../../components/VirtualizedRendererWrap';
-import { getDashboardFilterKey } from '../../dashboard/util/getDashboardFilterKey';
-import { getFilterColorMap } from '../../dashboard/util/dashboardFiltersColorMap';
-import { TIME_FILTER_LABELS } from '../../explore/constants';
-import FilterBadgeIcon from '../../components/FilterBadgeIcon';
+import FormLabel from 'src/components/FormLabel';
+
+import DateFilterControl from 'src/explore/components/controls/DateFilterControl';
+import ControlRow from 'src/explore/components/ControlRow';
+import Control from 'src/explore/components/Control';
+import { controls } from 'src/explore/controls';
+import { getExploreUrl } from 'src/explore/exploreUtils';
+import OnPasteSelect from 'src/components/Select/OnPasteSelect';
+import {
+  FILTER_CONFIG_ATTRIBUTES,
+  FILTER_OPTIONS_LIMIT,
+  TIME_FILTER_LABELS,
+} from 'src/explore/constants';
 
 import './FilterBox.less';
 
@@ -88,8 +92,15 @@ const defaultProps = {
   showSqlaTimeColumn: false,
   showDruidTimeGrain: false,
   showDruidTimeOrigin: false,
-  instantFiltering: true,
+  instantFiltering: false,
 };
+
+const Styles = styled.div`
+  height: 100%;
+  min-height: 100%;
+  max-height: 100%;
+  overflow: visible;
+`;
 
 class FilterBox extends React.Component {
   constructor(props) {
@@ -99,35 +110,52 @@ class FilterBox extends React.Component {
       // this flag is used by non-instant filter, to make the apply button enabled/disabled
       hasChanged: false,
     };
+    this.debouncerCache = {};
+    this.maxValueCache = {};
     this.changeFilter = this.changeFilter.bind(this);
-    this.onFilterMenuOpen = this.onFilterMenuOpen.bind(this, props.chartId);
+    this.onFilterMenuOpen = this.onFilterMenuOpen.bind(this);
+    this.onOpenDateFilterControl = this.onOpenDateFilterControl.bind(this);
     this.onFilterMenuClose = this.onFilterMenuClose.bind(this);
-    this.onFocus = this.onFilterMenuOpen;
-    this.onBlur = this.onFilterMenuClose;
-    this.onOpenDateFilterControl = this.onFilterMenuOpen.bind(
-      props.chartId,
-      TIME_RANGE,
-    );
   }
 
-  onFilterMenuOpen(chartId, column) {
-    this.props.onFilterMenuOpen(chartId, column);
+  onFilterMenuOpen(column) {
+    return this.props.onFilterMenuOpen(this.props.chartId, column);
   }
 
-  onFilterMenuClose() {
-    this.props.onFilterMenuClose();
+  onFilterMenuClose(column) {
+    return this.props.onFilterMenuClose(this.props.chartId, column);
   }
+
+  onOpenDateFilterControl() {
+    return this.onFilterMenuOpen(TIME_RANGE);
+  }
+
+  onCloseDateFilterControl = () => {
+    return this.onFilterMenuClose(TIME_RANGE);
+  };
 
   getControlData(controlName) {
     const { selectedValues } = this.state;
-    const control = Object.assign({}, controls[controlName], {
+    const control = {
+      ...controls[controlName], // TODO: make these controls ('druid_time_origin', 'granularity', 'granularity_sqla', 'time_grain_sqla') accessible from getControlsForVizType.
       name: controlName,
       key: `control-${controlName}`,
       value: selectedValues[TIME_FILTER_MAP[controlName]],
       actions: { setControlValue: this.changeFilter },
-    });
+    };
     const mapFunc = control.mapStateToProps;
-    return mapFunc ? Object.assign({}, control, mapFunc(this.props)) : control;
+    return mapFunc ? { ...control, ...mapFunc(this.props) } : control;
+  }
+
+  /**
+   * Get known max value of a column
+   */
+  getKnownMax(key, choices) {
+    this.maxValueCache[key] = Math.max(
+      this.maxValueCache[key] || 0,
+      d3Max(choices || this.props.filtersChoices[key] || [], x => x.metric),
+    );
+    return this.maxValueCache[key];
   }
 
   clickApply() {
@@ -142,42 +170,118 @@ class FilterBox extends React.Component {
     let vals = null;
     if (options !== null) {
       if (Array.isArray(options)) {
-        vals = options.map(opt => opt.value);
+        vals = options.map(opt => (typeof opt === 'string' ? opt : opt.value));
       } else if (options.value) {
         vals = options.value;
       } else {
         vals = options;
       }
     }
-    const selectedValues = {
-      ...this.state.selectedValues,
-      [fltr]: vals,
-    };
 
-    this.setState({ selectedValues, hasChanged: true }, () => {
-      if (this.props.instantFiltering) {
-        this.props.onChange({ [fltr]: vals }, false);
-      }
+    this.setState(
+      prevState => ({
+        selectedValues: {
+          ...prevState.selectedValues,
+          [fltr]: vals,
+        },
+        hasChanged: true,
+      }),
+      () => {
+        if (this.props.instantFiltering) {
+          this.props.onChange({ [fltr]: vals }, false);
+        }
+      },
+    );
+  }
+
+  /**
+   * Generate a debounce function that loads options for a specific column
+   */
+  debounceLoadOptions(key) {
+    if (!(key in this.debouncerCache)) {
+      this.debouncerCache[key] = debounce((input, callback) => {
+        this.loadOptions(key, input).then(callback);
+      }, 500);
+    }
+    return this.debouncerCache[key];
+  }
+
+  /**
+   * Transform select options, add bar background
+   */
+  transformOptions(options, max) {
+    const maxValue = max === undefined ? d3Max(options, x => x.metric) : max;
+    return options.map(opt => {
+      const perc = Math.round((opt.metric / maxValue) * 100);
+      const color = 'lightgrey';
+      const backgroundImage = `linear-gradient(to right, ${color}, ${color} ${perc}%, rgba(0,0,0,0) ${perc}%`;
+      const style = { backgroundImage };
+      return { value: opt.id, label: opt.id, style };
     });
   }
 
+  async loadOptions(key, inputValue = '') {
+    const input = inputValue.toLowerCase();
+    const sortAsc = this.props.filtersFields.find(x => x.key === key).asc;
+    const formData = {
+      ...this.props.rawFormData,
+      adhoc_filters: inputValue
+        ? [
+            {
+              clause: 'WHERE',
+              comparator: null,
+              expressionType: 'SQL',
+              // TODO: Evaluate SQL Injection risk
+              sqlExpression: `lower(${key}) like '%${input}%'`,
+            },
+          ]
+        : null,
+    };
+
+    const { json } = await SupersetClient.get({
+      url: getExploreUrl({
+        formData,
+        endpointType: 'json',
+        method: 'GET',
+      }),
+    });
+    const options = (json?.data?.[key] || []).filter(x => x.id);
+    if (!options || options.length === 0) {
+      return [];
+    }
+    if (input) {
+      // sort those starts with search query to front
+      options.sort((a, b) => {
+        const labelA = a.id.toLowerCase();
+        const labelB = b.id.toLowerCase();
+        const textOrder = labelB.startsWith(input) - labelA.startsWith(input);
+        return textOrder === 0
+          ? (a.metric - b.metric) * (sortAsc ? 1 : -1)
+          : textOrder;
+      });
+    }
+    return this.transformOptions(options, this.getKnownMax(key, options));
+  }
+
   renderDateFilter() {
-    const { showDateFilter, chartId } = this.props;
+    const { showDateFilter } = this.props;
     const label = TIME_FILTER_LABELS.time_range;
     if (showDateFilter) {
       return (
         <div className="row space-1">
-          <div className="col-lg-12 col-xs-12 filter-container">
-            {this.renderFilterBadge(chartId, TIME_RANGE, label)}
+          <div
+            className="col-lg-12 col-xs-12 filter-container"
+            data-test="date-filter-container"
+          >
             <DateFilterControl
               name={TIME_RANGE}
               label={label}
               description={t('Select start and end date')}
-              onChange={(...args) => {
-                this.changeFilter(TIME_RANGE, ...args);
+              onChange={newValue => {
+                this.changeFilter(TIME_RANGE, newValue);
               }}
               onOpenDateFilterControl={this.onOpenDateFilterControl}
-              onCloseDateFilterControl={this.onFilterMenuClose}
+              onCloseDateFilterControl={this.onCloseDateFilterControl}
               value={this.state.selectedValues[TIME_RANGE] || 'No filter'}
             />
           </div>
@@ -225,9 +329,12 @@ class FilterBox extends React.Component {
     }
     return datasourceFilters;
   }
+
   renderSelect(filterConfig) {
     const { filtersChoices } = this.props;
     const { selectedValues } = this.state;
+    this.debouncerCache = {};
+    this.maxValueCache = {};
 
     // Add created options to filtersChoices, even though it doesn't exist,
     // or these options will exist in query sql but invisible to end user.
@@ -236,13 +343,13 @@ class FilterBox extends React.Component {
         key => selectedValues.hasOwnProperty(key) && key in filtersChoices,
       )
       .forEach(key => {
-        const choices = filtersChoices[key] || [];
+        const choices = filtersChoices[key] || (filtersChoices[key] = []);
         const choiceIds = new Set(choices.map(f => f.id));
         const selectedValuesForKey = Array.isArray(selectedValues[key])
           ? selectedValues[key]
           : [selectedValues[key]];
         selectedValuesForKey
-          .filter(value => !choiceIds.has(value))
+          .filter(value => value !== null && !choiceIds.has(value))
           .forEach(value => {
             choices.unshift({
               filter: key,
@@ -253,103 +360,87 @@ class FilterBox extends React.Component {
           });
       });
     const { key, label } = filterConfig;
-    const data = this.props.filtersChoices[key];
-    const max = Math.max(...data.map(d => d.metric));
+    const data = filtersChoices[key] || [];
     let value = selectedValues[key] || null;
 
     // Assign default value if required
-    if (!value && filterConfig.defaultValue) {
-      if (filterConfig.multiple) {
+    if (
+      value === undefined &&
+      filterConfig[FILTER_CONFIG_ATTRIBUTES.DEFAULT_VALUE]
+    ) {
+      if (filterConfig[FILTER_CONFIG_ATTRIBUTES.MULTIPLE]) {
         // Support for semicolon-delimited multiple values
-        value = filterConfig.defaultValue.split(';');
+        value = filterConfig[FILTER_CONFIG_ATTRIBUTES.DEFAULT_VALUE].split(';');
       } else {
-        value = filterConfig.defaultValue;
+        value = filterConfig[FILTER_CONFIG_ATTRIBUTES.DEFAULT_VALUE];
       }
     }
+
     return (
       <OnPasteSelect
-        placeholder={t('Select [%s]', label)}
+        cacheOptions
+        loadOptions={this.debounceLoadOptions(key)}
+        defaultOptions={this.transformOptions(data)}
         key={key}
-        multi={filterConfig.multiple}
-        clearable={filterConfig.clearable}
+        placeholder={t('Type or Select [%s]', label)}
+        isMulti={filterConfig[FILTER_CONFIG_ATTRIBUTES.MULTIPLE]}
+        isClearable={filterConfig[FILTER_CONFIG_ATTRIBUTES.CLEARABLE]}
         value={value}
-        options={data.map(opt => {
-          const perc = Math.round((opt.metric / max) * 100);
-          const backgroundImage =
-            'linear-gradient(to right, lightgrey, ' +
-            `lightgrey ${perc}%, rgba(0,0,0,0) ${perc}%`;
-          const style = {
-            backgroundImage,
-            padding: '2px 5px',
-          };
-          return { value: opt.id, label: opt.id, style };
-        })}
-        onChange={(...args) => {
-          this.changeFilter(key, ...args);
+        options={this.transformOptions(data)}
+        onChange={newValue => {
+          // avoid excessive re-renders
+          if (newValue !== value) {
+            this.changeFilter(key, newValue);
+          }
         }}
-        onFocus={this.onFocus}
-        onBlur={this.onBlur}
-        onOpen={(...args) => {
-          this.onFilterMenuOpen(key, ...args);
-        }}
-        onClose={this.onFilterMenuClose}
-        selectComponent={Creatable}
-        selectWrap={VirtualizedSelect}
-        optionRenderer={VirtualizedRendererWrap(opt => opt.label)}
+        // TODO try putting this back once react-select is upgraded
+        // onFocus={() => this.onFilterMenuOpen(key)}
+        onMenuOpen={() => this.onFilterMenuOpen(key)}
+        onBlur={() => this.onFilterMenuClose(key)}
+        onMenuClose={() => this.onFilterMenuClose(key)}
+        selectWrap={
+          filterConfig[FILTER_CONFIG_ATTRIBUTES.SEARCH_ALL_OPTIONS] &&
+          data.length >= FILTER_OPTIONS_LIMIT
+            ? AsyncCreatableSelect
+            : CreatableSelect
+        }
         noResultsText={t('No results found')}
       />
     );
   }
 
   renderFilters() {
-    const { filtersFields, chartId } = this.props;
+    const { filtersFields = [] } = this.props;
     return filtersFields.map(filterConfig => {
       const { label, key } = filterConfig;
       return (
         <div key={key} className="m-b-5 filter-container">
-          {this.renderFilterBadge(chartId, key, label)}
-          <div>
-            <label htmlFor={`LABEL-${key}`}>{label}</label>
-            {this.renderSelect(filterConfig)}
-          </div>
+          <FormLabel htmlFor={`LABEL-${key}`}>{label}</FormLabel>
+          {this.renderSelect(filterConfig)}
         </div>
       );
     });
-  }
-
-  renderFilterBadge(chartId, column) {
-    const colorKey = getDashboardFilterKey({ chartId, column });
-    const filterColorMap = getFilterColorMap();
-    const colorCode = filterColorMap[colorKey];
-
-    return (
-      <div className="filter-badge-container">
-        <FilterBadgeIcon colorCode={colorCode} />
-      </div>
-    );
   }
 
   render() {
     const { instantFiltering } = this.props;
 
     return (
-      <div className="scrollbar-container">
-        <div className="scrollbar-content">
-          {this.renderDateFilter()}
-          {this.renderDatasourceFilters()}
-          {this.renderFilters()}
-          {!instantFiltering && (
-            <Button
-              bsSize="small"
-              bsStyle="primary"
-              onClick={this.clickApply.bind(this)}
-              disabled={!this.state.hasChanged}
-            >
-              {t('Apply')}
-            </Button>
-          )}
-        </div>
-      </div>
+      <Styles>
+        {this.renderDateFilter()}
+        {this.renderDatasourceFilters()}
+        {this.renderFilters()}
+        {!instantFiltering && (
+          <Button
+            buttonSize="small"
+            buttonStyle="primary"
+            onClick={this.clickApply.bind(this)}
+            disabled={!this.state.hasChanged}
+          >
+            {t('Apply')}
+          </Button>
+        )}
+      </Styles>
     );
   }
 }

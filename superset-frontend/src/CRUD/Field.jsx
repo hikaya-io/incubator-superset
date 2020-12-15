@@ -18,31 +18,25 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
-import {
-  FormGroup,
-  ControlLabel,
-  HelpBlock,
-  FormControl,
-  OverlayTrigger,
-  Tooltip,
-} from 'react-bootstrap';
+import { FormGroup, HelpBlock, FormControl } from 'react-bootstrap';
 
+import { Tooltip } from 'src/common/components/Tooltip';
+import FormLabel from 'src/components/FormLabel';
 import './crud.less';
 
 const propTypes = {
-  value: PropTypes.any.isRequired,
+  value: PropTypes.any,
   label: PropTypes.string.isRequired,
-  descr: PropTypes.node,
+  description: PropTypes.node,
   fieldKey: PropTypes.string.isRequired,
   control: PropTypes.node.isRequired,
   onChange: PropTypes.func,
   compact: PropTypes.bool,
 };
 const defaultProps = {
-  controlProps: {},
   onChange: () => {},
   compact: false,
-  desc: null,
+  description: null,
 };
 
 export default class Field extends React.PureComponent {
@@ -50,35 +44,37 @@ export default class Field extends React.PureComponent {
     super(props);
     this.onChange = this.onChange.bind(this);
   }
+
   onChange(newValue) {
     this.props.onChange(this.props.fieldKey, newValue);
   }
+
   render() {
-    const { compact, value, label, control, descr, fieldKey } = this.props;
+    const {
+      compact,
+      value,
+      label,
+      control,
+      description,
+      fieldKey,
+    } = this.props;
     const hookedControl = React.cloneElement(control, {
       value,
       onChange: this.onChange,
     });
     return (
       <FormGroup controlId={fieldKey}>
-        <ControlLabel className="m-r-5">
+        <FormLabel className="m-r-5">
           {label || fieldKey}
-          {compact && descr && (
-            <OverlayTrigger
-              placement="right"
-              overlay={
-                <Tooltip id="field-descr" bsSize="lg">
-                  {descr}
-                </Tooltip>
-              }
-            >
+          {compact && description && (
+            <Tooltip id="field-descr" placement="right" title={description}>
               <i className="fa fa-info-circle m-l-5" />
-            </OverlayTrigger>
+            </Tooltip>
           )}
-        </ControlLabel>
+        </FormLabel>{' '}
         {hookedControl}
         <FormControl.Feedback />
-        {!compact && descr && <HelpBlock>{descr}</HelpBlock>}
+        {!compact && description && <HelpBlock>{description}</HelpBlock>}
       </FormGroup>
     );
   }

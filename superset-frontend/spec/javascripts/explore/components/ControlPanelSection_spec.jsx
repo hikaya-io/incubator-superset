@@ -19,10 +19,8 @@
 import React from 'react';
 import { shallow } from 'enzyme';
 import { Panel } from 'react-bootstrap';
-
-import InfoTooltipWithTrigger from '../../../../src/components/InfoTooltipWithTrigger';
-
-import ControlPanelSection from '../../../../src/explore/components/ControlPanelSection';
+import { InfoTooltipWithTrigger } from '@superset-ui/chart-controls';
+import ControlPanelSection from 'src/explore/components/ControlPanelSection';
 
 const defaultProps = {
   children: <div>a child element</div>,
@@ -45,7 +43,7 @@ describe('ControlPanelSection', () => {
 
   it('renders a Panel component', () => {
     wrapper = shallow(<ControlPanelSection {...defaultProps} />);
-    expect(wrapper.find(Panel)).toHaveLength(1);
+    expect(wrapper.find(Panel)).toExist();
   });
 
   describe('with optional props', () => {
@@ -55,20 +53,12 @@ describe('ControlPanelSection', () => {
     });
 
     it('renders a label if present', () => {
-      expect(
-        wrapper
-          .find(Panel)
-          .dive()
-          .text(),
-      ).toContain('my label');
+      expect(wrapper.find(Panel.Title).dive().text()).toContain('my label');
     });
 
     it('renders a InfoTooltipWithTrigger if label and tooltip is present', () => {
       expect(
-        wrapper
-          .find(Panel)
-          .dive()
-          .find(InfoTooltipWithTrigger),
+        wrapper.find(Panel).dive().find(InfoTooltipWithTrigger),
       ).toHaveLength(1);
     });
   });

@@ -20,14 +20,18 @@
 @import './less/variables.less';
 @import './less/index.less';
 
-@datasource-sql-expression-width: 450px;
+@datasource-sql-expression-width: 315px;
+
+span,
+div,
+i {
+  &:focus {
+    outline: none;
+  }
+}
 
 .alert.alert-danger > .debugger {
   color: @danger;
-}
-
-.label {
-  font-size: 100%;
 }
 
 .no-wrap {
@@ -80,6 +84,8 @@ input.form-control {
 
 .container-fluid {
   text-align: left;
+  padding-left: 16px;
+  padding-right: 16px;
 }
 
 input[type='checkbox'] {
@@ -95,11 +101,6 @@ input[type='checkbox'] {
 .header span.label {
   margin-left: 5px;
   margin-right: 5px;
-}
-
-#timer {
-  width: 80px;
-  text-align: right;
 }
 
 .notbtn {
@@ -151,12 +152,6 @@ div.navbar {
   .tooltip-inner {
     max-width: 350px;
   }
-}
-
-img.loading {
-  width: 40px;
-  position: relative;
-  margin: 10px;
 }
 
 img.viz-thumb-option {
@@ -231,9 +226,11 @@ table.table-no-hover tr:hover {
 }
 
 .editable-title.datasource-sql-expression {
+  font-feature-settings: @font-feature-settings;
   font-family: @font-family-monospace;
   display: inline-block;
   min-width: @datasource-sql-expression-width;
+  width: 100%;
 }
 
 .editable-title.datasource-sql-expression input {
@@ -242,6 +239,7 @@ table.table-no-hover tr:hover {
 }
 
 .editable-title.datasource-sql-expression textarea {
+  min-height: 100px;
   width: 95%;
 }
 
@@ -285,18 +283,12 @@ table.table-no-hover tr:hover {
   }
 }
 
-.nav.nav-tabs li .anchor-link-container {
-  top: 0;
-  right: -32px;
-}
-
 .dashboard-component.dashboard-component-header .anchor-link-container {
   .fa.fa-link {
     font-size: @font-size-l;
   }
 }
 
-.nav.nav-tabs li:hover,
 .dashboard-component.dashboard-component-header:hover {
   .anchor-link-container {
     cursor: pointer;
@@ -327,8 +319,16 @@ table.table-no-hover tr:hover {
   margin-top: 10px;
 }
 
+.m-t-20 {
+  margin-top: 20px;
+}
+
 .m-b-10 {
   margin-bottom: 10px;
+}
+
+.m-l-4 {
+  margin-left: 4px;
 }
 
 .m-l-5 {
@@ -355,10 +355,6 @@ table.table-no-hover tr:hover {
   padding-right: 2;
 }
 
-.Select-menu-outer {
-  z-index: @z-index-dropdown !important;
-}
-
 /** not found record **/
 .panel b {
   display: inline-block;
@@ -369,9 +365,6 @@ table.table-no-hover tr:hover {
 }
 
 /** table on both sides of the gap **/
-.panel .table-responsive {
-  padding: 0 1%;
-}
 @media screen and (max-width: 767px) {
   .panel .table-responsive {
     width: 98%;
@@ -448,11 +441,14 @@ table.table-no-hover tr:hover {
 }
 
 .list-add-action .btn.btn-sm {
-  padding: 5px 6px;
+  padding: 6px 6px;
   font-size: @font-size-xs;
   line-height: 2px;
   border-radius: 50%;
   box-shadow: 2px 2px 4px -1px fade(@darkest, @opacity-light);
+  i {
+    width: 10px;
+  }
 }
 
 iframe {
@@ -530,38 +526,6 @@ tr.reactable-column-header th.reactable-header-sortable {
   padding-right: 17px;
 }
 
-.explore-chart-overlay {
-  position: absolute;
-  z-index: @z-index-above-dashboard-charts;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.refresh-overlay-btn {
-  font-weight: @font-weight-bold;
-  margin-right: 10px;
-}
-
-.dismiss-overlay-btn {
-  font-weight: @font-weight-bold;
-  background: @lightest;
-  color: @brand-primary;
-  border-color: @brand-primary;
-}
-
-.fave-unfave-icon {
-  .fa-star-o,
-  .fa-star {
-    &,
-    &:hover,
-    &:active {
-      color: @almost-black;
-    }
-  }
-}
-
 .metric-edit-popover-label-input {
   border-radius: @border-radius-large;
   height: 30px;
@@ -578,4 +542,51 @@ td.filtered {
 
 .table-name {
   font-size: @font-size-l;
+}
+.select2-container-multi {
+  width: 100% !important;
+}
+
+// Remove this when the jinja menu/navbar is replaced with react.
+// This style already exists in that view
+.navbar-brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+// Making native radio buttons use brand color
+input[type='radio']:after {
+  width: 15px;
+  height: 15px;
+  border-radius: 15px;
+  top: -2px;
+  left: -1px;
+  position: relative;
+  background-color: #fff;
+  content: '';
+  display: inline-block;
+  visibility: visible;
+  border: 2px solid @gray;
+}
+
+input[type='radio']:checked:after {
+  width: 15px;
+  height: 15px;
+  border-radius: 15px;
+  top: -2px;
+  left: -1px;
+  position: relative;
+  background-color: #fff;
+  content: '';
+  display: inline-block;
+  visibility: visible;
+  border: 5px solid @brand-primary;
+}
+hr {
+  border-top: 1px solid @gray-light;
+}
+.ace_gutter-cell.ace_error {
+  background-image: url('../images/icons/error_solid_small_red.svg') !important;
+  background-position: -2px center !important;
 }

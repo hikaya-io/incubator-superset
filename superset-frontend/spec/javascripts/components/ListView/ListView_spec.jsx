@@ -17,49 +17,129 @@
  * under the License.
  */
 import React from 'react';
-import { mount } from 'enzyme';
+import { styledMount as mount } from 'spec/helpers/theming';
 import { act } from 'react-dom/test-utils';
-import { MenuItem, Pagination } from 'react-bootstrap';
+import { QueryParamProvider } from 'use-query-params';
+import { supersetTheme, ThemeProvider } from '@superset-ui/core';
 
+import Button from 'src/components/Button';
+import { Empty } from 'src/common/components';
+import CardCollection from 'src/components/ListView/CardCollection';
+import { CardSortSelect } from 'src/components/ListView/CardSortSelect';
+import IndeterminateCheckbox from 'src/components/IndeterminateCheckbox';
 import ListView from 'src/components/ListView/ListView';
+import ListViewFilters from 'src/components/ListView/Filters';
+import ListViewPagination from 'src/components/dataViewCommon/Pagination';
+import TableCollection from 'src/components/dataViewCommon/TableCollection';
+import Pagination from 'src/components/Pagination';
+
+import waitForComponentToPaint from 'spec/helpers/waitForComponentToPaint';
+
+function makeMockLocation(query) {
+  const queryStr = encodeURIComponent(query);
+  return {
+    protocol: 'http:',
+    host: 'localhost',
+    pathname: '/',
+    search: queryStr.length ? `?${queryStr}` : '',
+  };
+}
+
+const fetchSelectsMock = jest.fn(() => []);
+const mockedProps = {
+  title: 'Data Table',
+  columns: [
+    {
+      accessor: 'id',
+      Header: 'ID',
+      sortable: true,
+    },
+    {
+      accessor: 'age',
+      Header: 'Age',
+    },
+    {
+      accessor: 'name',
+      Header: 'Name',
+    },
+    {
+      accessor: 'time',
+      Header: 'Time',
+    },
+  ],
+  filters: [
+    {
+      Header: 'ID',
+      id: 'id',
+      input: 'select',
+      selects: [{ label: 'foo', value: 'bar' }],
+      operator: 'eq',
+    },
+    {
+      Header: 'Name',
+      id: 'name',
+      input: 'search',
+      operator: 'ct',
+    },
+    {
+      Header: 'Age',
+      id: 'age',
+      input: 'select',
+      fetchSelects: fetchSelectsMock,
+      paginate: true,
+      operator: 'eq',
+    },
+    {
+      Header: 'Time',
+      id: 'time',
+      input: 'datetime_range',
+      operator: 'between',
+    },
+  ],
+  data: [
+    { id: 1, name: 'data 1', age: 10, time: '2020-11-18T07:53:45.354Z' },
+    { id: 2, name: 'data 2', age: 1, time: '2020-11-18T07:53:45.354Z' },
+  ],
+  count: 2,
+  pageSize: 1,
+  fetchData: jest.fn(() => []),
+  loading: false,
+  bulkSelectEnabled: true,
+  disableBulkSelect: jest.fn(),
+  bulkActions: [
+    {
+      key: 'something',
+      name: 'do something',
+      style: 'danger',
+      onSelect: jest.fn(),
+    },
+  ],
+  cardSortSelectOptions: [
+    {
+      desc: false,
+      id: 'something',
+      label: 'Alphabetical',
+      value: 'alphabetical',
+    },
+  ],
+};
+
+const factory = (props = mockedProps) =>
+  mount(
+    <QueryParamProvider location={makeMockLocation()}>
+      <ListView {...props} />
+    </QueryParamProvider>,
+    {
+      wrappingComponent: ThemeProvider,
+      wrappingComponentProps: { theme: supersetTheme },
+    },
+  );
 
 describe('ListView', () => {
-  const mockedProps = {
-    title: 'Data Table',
-    columns: [
-      {
-        accessor: 'id',
-        Header: 'ID',
-        sortable: true,
-      },
-      {
-        accessor: 'name',
-        Header: 'Name',
-        filterable: true,
-      },
-    ],
-    filters: [
-      {
-        Header: 'Name',
-        id: 'name',
-        operators: [{ label: 'Starts With', value: 'sw' }],
-      },
-    ],
-    data: [
-      { id: 1, name: 'data 1' },
-      { id: 2, name: 'data 2' },
-    ],
-    count: 2,
-    pageSize: 1,
-    fetchData: jest.fn(() => []),
-    loading: false,
-    filterTypes: {
-      id: [],
-      name: [{ name: 'sw', label: 'Starts With' }],
-    },
-    bulkActions: [{ name: 'do something', onSelect: jest.fn() }],
-  };
-  const wrapper = mount(<ListView {...mockedProps} />);
+  let wrapper = beforeAll(async () => {
+    wrapper = factory();
+    await waitForComponentToPaint(wrapper);
+  });
 
   afterEach(() => {
     mockedProps.fetchData.mockClear();
@@ -69,85 +149,296 @@ describe('ListView', () => {
   });
 
   it('calls fetchData on mount', () => {
-    expect(wrapper.find(ListView)).toHaveLength(1);
+    expect(wrapper.find(ListView)).toExist();
     expect(mockedProps.fetchData.mock.calls[0]).toMatchInlineSnapshot(`
-                                          Array [
-                                            Object {
-                                              "filters": Array [],
-                                              "pageIndex": 0,
-                                              "pageSize": 1,
-                                              "sortBy": Array [],
-                                            },
-                                          ]
-                            `);
+                                                      Array [
+                                                        Object {
+                                                          "filters": Array [],
+                                                          "pageIndex": 0,
+                                                          "pageSize": 1,
+                                                          "sortBy": Array [],
+                                                        },
+                                                      ]
+                                    `);
   });
 
   it('calls fetchData on sort', () => {
-    wrapper
-      .find('[data-test="sort-header"]')
-      .at(1)
-      .simulate('click');
+    wrapper.find('[data-test="sort-header"]').at(1).simulate('click');
 
     expect(mockedProps.fetchData).toHaveBeenCalled();
     expect(mockedProps.fetchData.mock.calls[0]).toMatchInlineSnapshot(`
-                                          Array [
-                                            Object {
-                                              "filters": Array [],
-                                              "pageIndex": 0,
-                                              "pageSize": 1,
-                                              "sortBy": Array [
-                                                Object {
-                                                  "desc": false,
-                                                  "id": "id",
-                                                },
-                                              ],
-                                            },
-                                          ]
-                            `);
+                                                      Array [
+                                                        Object {
+                                                          "filters": Array [],
+                                                          "pageIndex": 0,
+                                                          "pageSize": 1,
+                                                          "sortBy": Array [
+                                                            Object {
+                                                              "desc": false,
+                                                              "id": "id",
+                                                            },
+                                                          ],
+                                                        },
+                                                      ]
+                                    `);
   });
 
-  it('calls fetchData on filter', () => {
-    act(() => {
-      wrapper
-        .find('.dropdown-toggle')
-        .children('button')
-        .at(0)
-        .props()
-        .onClick();
+  it('renders pagination controls', () => {
+    expect(wrapper.find(Pagination)).toExist();
+    expect(wrapper.find(Pagination.Prev)).toExist();
+    expect(wrapper.find(Pagination.Item)).toExist();
+    expect(wrapper.find(Pagination.Next)).toExist();
+  });
 
-      wrapper
-        .find(MenuItem)
-        .at(0)
-        .props()
-        .onSelect({ id: 'name', Header: 'name' });
-    });
-    wrapper.update();
-
+  it('calls fetchData on page change', () => {
     act(() => {
-      wrapper.find('.filter-inputs input[type="text"]').prop('onChange')({
-        persist() {},
-        currentTarget: { value: 'foo' },
-      });
-    });
-    wrapper.update();
-
-    act(() => {
-      wrapper
-        .find('[data-test="apply-filters"]')
-        .last()
-        .prop('onClick')();
+      wrapper.find(ListViewPagination).prop('onChange')(2);
     });
     wrapper.update();
 
     expect(mockedProps.fetchData.mock.calls[0]).toMatchInlineSnapshot(`
       Array [
         Object {
+          "filters": Array [],
+          "pageIndex": 1,
+          "pageSize": 1,
+          "sortBy": Array [
+            Object {
+              "desc": false,
+              "id": "id",
+            },
+          ],
+        },
+      ]
+    `);
+  });
+
+  it('handles bulk actions on 1 row', () => {
+    act(() => {
+      wrapper.find('input[id="0"]').at(0).prop('onChange')({
+        target: { value: 'on' },
+      });
+    });
+    wrapper.update();
+
+    act(() => {
+      wrapper
+        .find('[data-test="bulk-select-controls"]')
+        .find(Button)
+        .props()
+        .onClick();
+    });
+
+    expect(mockedProps.bulkActions[0].onSelect.mock.calls[0])
+      .toMatchInlineSnapshot(`
+      Array [
+        Array [
+          Object {
+            "age": 10,
+            "id": 1,
+            "name": "data 1",
+            "time": "2020-11-18T07:53:45.354Z",
+          },
+        ],
+      ]
+    `);
+  });
+
+  it('handles bulk actions on all rows', () => {
+    act(() => {
+      wrapper.find('input[id="header-toggle-all"]').at(0).prop('onChange')({
+        target: { value: 'on' },
+      });
+    });
+    wrapper.update();
+
+    act(() => {
+      wrapper
+        .find('[data-test="bulk-select-controls"]')
+        .find(Button)
+        .props()
+        .onClick();
+    });
+
+    expect(mockedProps.bulkActions[0].onSelect.mock.calls[0])
+      .toMatchInlineSnapshot(`
+      Array [
+        Array [
+          Object {
+            "age": 10,
+            "id": 1,
+            "name": "data 1",
+            "time": "2020-11-18T07:53:45.354Z",
+          },
+          Object {
+            "age": 1,
+            "id": 2,
+            "name": "data 2",
+            "time": "2020-11-18T07:53:45.354Z",
+          },
+        ],
+      ]
+    `);
+  });
+
+  it('allows deselecting all', async () => {
+    act(() => {
+      wrapper.find('[data-test="bulk-select-deselect-all"]').props().onClick();
+    });
+    await waitForComponentToPaint(wrapper);
+    wrapper.update();
+    wrapper.find(IndeterminateCheckbox).forEach(input => {
+      expect(input.props().checked).toBe(false);
+    });
+  });
+
+  it('allows disabling bulkSelect', () => {
+    wrapper
+      .find('[data-test="bulk-select-controls"]')
+      .at(0)
+      .props()
+      .onDismiss();
+    expect(mockedProps.disableBulkSelect).toHaveBeenCalled();
+  });
+
+  it('disables bulk select based on prop', async () => {
+    const wrapper2 = factory({ ...mockedProps, bulkSelectEnabled: false });
+    await waitForComponentToPaint(wrapper2);
+    expect(wrapper2.find('[data-test="bulk-select-controls"]').exists()).toBe(
+      false,
+    );
+  });
+
+  it('disables card view based on prop', async () => {
+    expect(wrapper.find(CardCollection).exists()).toBe(false);
+    expect(wrapper.find(CardSortSelect).exists()).toBe(false);
+    expect(wrapper.find(TableCollection).exists()).toBe(true);
+  });
+
+  it('enables card view based on prop', async () => {
+    const wrapper2 = factory({
+      ...mockedProps,
+      renderCard: jest.fn(),
+      initialSort: [{ id: 'something' }],
+    });
+    await waitForComponentToPaint(wrapper2);
+    expect(wrapper2.find(CardCollection).exists()).toBe(true);
+    expect(wrapper2.find(CardSortSelect).exists()).toBe(true);
+    expect(wrapper2.find(TableCollection).exists()).toBe(false);
+  });
+
+  it('allows setting the default view mode', async () => {
+    const wrapper2 = factory({
+      ...mockedProps,
+      renderCard: jest.fn(),
+      defaultViewMode: 'card',
+      initialSort: [{ id: 'something' }],
+    });
+    await waitForComponentToPaint(wrapper2);
+    expect(wrapper2.find(CardCollection).exists()).toBe(true);
+
+    const wrapper3 = factory({
+      ...mockedProps,
+      renderCard: jest.fn(),
+      defaultViewMode: 'table',
+      initialSort: [{ id: 'something' }],
+    });
+    await waitForComponentToPaint(wrapper3);
+    expect(wrapper3.find(TableCollection).exists()).toBe(true);
+  });
+
+  it('Throws an exception if filter missing in columns', () => {
+    expect.assertions(1);
+    const props = {
+      ...mockedProps,
+      filters: [...mockedProps.filters, { id: 'some_column' }],
+    };
+    expect(() => {
+      mount(<ListView {...props} />, {
+        wrappingComponent: ThemeProvider,
+        wrappingComponentProps: { theme: supersetTheme },
+      });
+    }).toThrowErrorMatchingInlineSnapshot(
+      '"Invalid filter config, some_column is not present in columns"',
+    );
+  });
+
+  it('renders and empty state when there is no data', () => {
+    const props = {
+      ...mockedProps,
+      data: [],
+    };
+
+    const wrapper2 = factory(props);
+    expect(wrapper2.find(Empty)).toExist();
+  });
+
+  it('renders UI filters', () => {
+    expect(wrapper.find(ListViewFilters)).toExist();
+  });
+
+  it('fetched async filter values on mount', () => {
+    expect(fetchSelectsMock).toHaveBeenCalled();
+  });
+
+  it('calls fetchData on filter', () => {
+    act(() => {
+      wrapper
+        .find('[data-test="filters-select"]')
+        .first()
+        .props()
+        .onChange({ value: 'bar' });
+    });
+
+    act(() => {
+      wrapper
+        .find('[data-test="filters-search"]')
+        .first()
+        .props()
+        .onChange({ currentTarget: { value: 'something' } });
+    });
+
+    wrapper.update();
+
+    act(() => {
+      wrapper.find('[data-test="search-input"]').last().props().onBlur();
+    });
+
+    expect(mockedProps.fetchData.mock.calls[0]).toMatchInlineSnapshot(`
+      Array [
+        Object {
           "filters": Array [
             Object {
-              "Header": "name",
+              "id": "id",
+              "operator": "eq",
+              "value": "bar",
+            },
+          ],
+          "pageIndex": 0,
+          "pageSize": 1,
+          "sortBy": Array [
+            Object {
+              "desc": false,
+              "id": "id",
+            },
+          ],
+        },
+      ]
+    `);
+
+    expect(mockedProps.fetchData.mock.calls[1]).toMatchInlineSnapshot(`
+      Array [
+        Object {
+          "filters": Array [
+            Object {
+              "id": "id",
+              "operator": "eq",
+              "value": "bar",
+            },
+            Object {
               "id": "name",
-              "operator": "sw",
-              "value": "foo",
+              "operator": "ct",
+              "value": "something",
             },
           ],
           "pageIndex": 0,
@@ -163,103 +454,23 @@ describe('ListView', () => {
     `);
   });
 
-  it('calls fetchData on page change', () => {
-    act(() => {
-      wrapper.find(Pagination).prop('onSelect')(2);
+  it('calls fetchData on card view sort', async () => {
+    const wrapper2 = factory({
+      ...mockedProps,
+      renderCard: jest.fn(),
+      initialSort: [{ id: 'something' }],
     });
-    wrapper.update();
 
-    expect(mockedProps.fetchData.mock.calls[0]).toMatchInlineSnapshot(`
-      Array [
-        Object {
-          "filters": Array [
-            Object {
-              "Header": "name",
-              "id": "name",
-              "operator": "sw",
-              "value": "foo",
-            },
-          ],
-          "pageIndex": 1,
-          "pageSize": 1,
-          "sortBy": Array [
-            Object {
-              "desc": false,
-              "id": "id",
-            },
-          ],
-        },
-      ]
-    `);
-  });
-  it('handles bulk actions on 1 row', () => {
     act(() => {
-      wrapper
-        .find('input[title="Toggle Row Selected"]')
-        .at(0)
-        .prop('onChange')({ target: { value: 'on' } });
-
-      wrapper
-        .find('.dropdown-toggle')
-        .children('button')
-        .at(1)
-        .props()
-        .onClick();
+      wrapper2.find('[data-test="card-sort-select"]').first().props().onChange({
+        desc: false,
+        id: 'something',
+        label: 'Alphabetical',
+        value: 'alphabetical',
+      });
     });
-    wrapper.update();
-    const bulkActionsProps = wrapper
-      .find(MenuItem)
-      .last()
-      .props();
 
-    bulkActionsProps.onSelect(bulkActionsProps.eventKey);
-    expect(mockedProps.bulkActions[0].onSelect.mock.calls[0])
-      .toMatchInlineSnapshot(`
-                        Array [
-                          Array [
-                            Object {
-                              "id": 1,
-                              "name": "data 1",
-                            },
-                          ],
-                        ]
-                `);
-  });
-  it('handles bulk actions on all rows', () => {
-    act(() => {
-      wrapper
-        .find('input[title="Toggle All Rows Selected"]')
-        .at(0)
-        .prop('onChange')({ target: { value: 'on' } });
-
-      wrapper
-        .find('.dropdown-toggle')
-        .children('button')
-        .at(1)
-        .props()
-        .onClick();
-    });
-    wrapper.update();
-    const bulkActionsProps = wrapper
-      .find(MenuItem)
-      .last()
-      .props();
-
-    bulkActionsProps.onSelect(bulkActionsProps.eventKey);
-    expect(mockedProps.bulkActions[0].onSelect.mock.calls[0])
-      .toMatchInlineSnapshot(`
-            Array [
-              Array [
-                Object {
-                  "id": 1,
-                  "name": "data 1",
-                },
-                Object {
-                  "id": 2,
-                  "name": "data 2",
-                },
-              ],
-            ]
-        `);
+    wrapper2.update();
+    expect(mockedProps.fetchData).toHaveBeenCalled();
   });
 });

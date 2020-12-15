@@ -17,13 +17,16 @@
  * under the License.
  */
 module.exports = {
-  testRegex: '\\/spec\\/.*(_spec|\\.test)\\.(j|t)sx?$',
+  testRegex: '(\\/spec|\\/src)\\/.*(_spec|\\.test)\\.(j|t)sx?$',
   moduleNameMapper: {
     '\\.(css|less)$': '<rootDir>/spec/__mocks__/styleMock.js',
-    '\\.(gif|ttf|eot|svg)$': '<rootDir>/spec/__mocks__/fileMock.js',
+    '\\.(gif|ttf|eot)$': '<rootDir>/spec/__mocks__/fileMock.js',
+    '\\.svg$': '<rootDir>/spec/__mocks__/svgrMock.js',
     '^src/(.*)$': '<rootDir>/src/$1',
+    '^spec/(.*)$': '<rootDir>/spec/$1',
   },
-  setupFilesAfterEnv: ['<rootDir>/spec/helpers/shim.js'],
+  testEnvironment: 'enzyme',
+  setupFilesAfterEnv: ['<rootDir>/spec/helpers/setup.ts'],
   testURL: 'http://localhost',
   collectCoverageFrom: ['src/**/*.{js,jsx,ts,tsx}'],
   coverageDirectory: '<rootDir>/coverage/',
@@ -34,6 +37,7 @@ module.exports = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   globals: {
     'ts-jest': {
+      babelConfig: true,
       diagnostics: {
         warnOnly: true,
       },

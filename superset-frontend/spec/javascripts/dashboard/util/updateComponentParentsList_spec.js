@@ -16,12 +16,12 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import updateComponentParentsList from '../../../../src/dashboard/util/updateComponentParentsList';
-import { DASHBOARD_ROOT_ID } from '../../../../src/dashboard/util/constants';
+import updateComponentParentsList from 'src/dashboard/util/updateComponentParentsList';
+import { DASHBOARD_ROOT_ID } from 'src/dashboard/util/constants';
 import {
   dashboardLayout,
   dashboardLayoutWithTabs,
-} from '../fixtures/mockDashboardLayout';
+} from 'spec/fixtures/mockDashboardLayout';
 
 describe('updateComponentParentsList', () => {
   const emptyLayout = {

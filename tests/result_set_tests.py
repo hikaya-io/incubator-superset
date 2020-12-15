@@ -17,9 +17,6 @@
 # isort:skip_file
 from datetime import datetime
 
-import numpy as np
-import pandas as pd
-
 import tests.test_app
 from superset.dataframe import df_to_records
 from superset.db_engine_specs import BaseEngineSpec
@@ -28,7 +25,7 @@ from superset.result_set import dedup, SupersetResultSet
 from .base_tests import SupersetTestCase
 
 
-class SupersetResultSetTestCase(SupersetTestCase):
+class TestSupersetResultSet(SupersetTestCase):
     def test_dedup(self):
         self.assertEqual(dedup(["foo", "bar"]), ["foo", "bar"])
         self.assertEqual(
@@ -88,12 +85,16 @@ class SupersetResultSetTestCase(SupersetTestCase):
         )
 
     def test_is_date(self):
-        is_date = SupersetResultSet.is_date
-        self.assertEqual(is_date("DATETIME"), True)
-        self.assertEqual(is_date("TIMESTAMP"), True)
-        self.assertEqual(is_date("STRING"), False)
-        self.assertEqual(is_date(""), False)
-        self.assertEqual(is_date(None), False)
+        data = [("a", 1), ("a", 2)]
+        cursor_descr = (("a", "string"), ("a", "string"))
+        results = SupersetResultSet(data, cursor_descr, BaseEngineSpec)
+        self.assertEqual(results.is_temporal("DATE"), True)
+        self.assertEqual(results.is_temporal("DATETIME"), True)
+        self.assertEqual(results.is_temporal("TIME"), True)
+        self.assertEqual(results.is_temporal("TIMESTAMP"), True)
+        self.assertEqual(results.is_temporal("STRING"), False)
+        self.assertEqual(results.is_temporal(""), False)
+        self.assertEqual(results.is_temporal(None), False)
 
     def test_dedup_with_data(self):
         data = [("a", 1), ("a", 2)]
@@ -107,6 +108,19 @@ class SupersetResultSetTestCase(SupersetTestCase):
         cursor_descr = [("user_id", "bigint", None, None, None, None, True)]
         results = SupersetResultSet(data, cursor_descr, BaseEngineSpec)
         self.assertEqual(results.columns[0]["type"], "BIGINT")
+
+    def test_data_as_list_of_lists(self):
+        data = [[1, "a"], [2, "b"]]
+        cursor_descr = [
+            ("user_id", "INT", None, None, None, None, True),
+            ("username", "STRING", None, None, None, None, True),
+        ]
+        results = SupersetResultSet(data, cursor_descr, BaseEngineSpec)
+        df = results.to_pandas_df()
+        self.assertEqual(
+            df_to_records(df),
+            [{"user_id": 1, "username": "a"}, {"user_id": 2, "username": "b"}],
+        )
 
     def test_nullable_bool(self):
         data = [(None,), (True,), (None,), (None,), (None,), (None,)]

@@ -14,18 +14,21 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=C,R,W
 import logging
+from typing import Any, Dict
+
+from sqlalchemy.orm import Session
 
 from superset.connectors.druid.models import DruidCluster
 from superset.models.core import Database
 
+EXPORT_VERSION = "1.0.0"
 DATABASES_KEY = "databases"
 DRUID_CLUSTERS_KEY = "druid_clusters"
 logger = logging.getLogger(__name__)
 
 
-def export_schema_to_dict(back_references):
+def export_schema_to_dict(back_references: bool) -> Dict[str, Any]:
     """Exports the supported import/export schema to a dictionary"""
     databases = [
         Database.export_schema(recursive=True, include_parent_ref=back_references)
@@ -41,7 +44,9 @@ def export_schema_to_dict(back_references):
     return data
 
 
-def export_to_dict(session, recursive, back_references, include_defaults):
+def export_to_dict(
+    session: Session, recursive: bool, back_references: bool, include_defaults: bool
+) -> Dict[str, Any]:
     """Exports databases and druid clusters to a dictionary"""
     logger.info("Starting export")
     dbs = session.query(Database)
@@ -70,20 +75,3 @@ def export_to_dict(session, recursive, back_references, include_defaults):
     if clusters:
         data[DRUID_CLUSTERS_KEY] = clusters
     return data
-
-
-def import_from_dict(session, data, sync=[]):
-    """Imports databases and druid clusters from dictionary"""
-    if isinstance(data, dict):
-        logger.info("Importing %d %s", len(data.get(DATABASES_KEY, [])), DATABASES_KEY)
-        for database in data.get(DATABASES_KEY, []):
-            Database.import_from_dict(session, database, sync=sync)
-
-        logger.info(
-            "Importing %d %s", len(data.get(DRUID_CLUSTERS_KEY, [])), DRUID_CLUSTERS_KEY
-        )
-        for datasource in data.get(DRUID_CLUSTERS_KEY, []):
-            DruidCluster.import_from_dict(session, datasource, sync=sync)
-        session.commit()
-    else:
-        logger.info("Supplied object is not a dictionary.")

@@ -20,8 +20,8 @@ import React from 'react';
 import configureStore from 'redux-mock-store';
 import { shallow } from 'enzyme';
 
-import { OverlayTrigger } from 'react-bootstrap';
-import URLShortLinkButton from '../../../src/components/URLShortLinkButton';
+import Popover from 'src/common/components/Popover';
+import URLShortLinkButton from 'src/components/URLShortLinkButton';
 
 describe('URLShortLinkButton', () => {
   const defaultProps = {
@@ -33,13 +33,13 @@ describe('URLShortLinkButton', () => {
   function setup() {
     const mockStore = configureStore([]);
     const store = mockStore({});
-    return shallow(<URLShortLinkButton {...defaultProps} />, {
-      context: { store },
-    }).dive();
+    return shallow(
+      <URLShortLinkButton store={store} {...defaultProps} />,
+    ).dive();
   }
 
   it('renders OverlayTrigger', () => {
     const wrapper = setup();
-    expect(wrapper.find(OverlayTrigger)).toHaveLength(1);
+    expect(wrapper.find(Popover)).toExist();
   });
 });

@@ -21,17 +21,16 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { bindActionCreators } from 'redux';
 import { connect } from 'react-redux';
-import { Alert, Tab, Tabs } from 'react-bootstrap';
-import { isPlainObject } from 'lodash';
-import { t } from '@superset-ui/translation';
-import { getChartControlPanelRegistry } from '@superset-ui/chart';
+import { Alert } from 'react-bootstrap';
+import { css } from '@emotion/core';
+import { t, styled } from '@superset-ui/core';
 
+import Tabs from 'src/common/components/Tabs';
 import ControlPanelSection from './ControlPanelSection';
 import ControlRow from './ControlRow';
 import Control from './Control';
-import controlConfigs from '../controls';
 import { sectionsToRender } from '../controlUtils';
-import * as exploreActions from '../actions/exploreActions';
+import { exploreActions } from '../actions/exploreActions';
 
 const propTypes = {
   actions: PropTypes.object.isRequired,
@@ -43,45 +42,44 @@ const propTypes = {
   isDatasourceMetaLoading: PropTypes.bool.isRequired,
 };
 
+const Styles = styled.div`
+  height: 100%;
+  max-height: 100%;
+  overflow: auto;
+  .remove-alert {
+    cursor: pointer;
+  }
+  #controlSections {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-height: 100%;
+  }
+  .nav-tabs {
+    flex: 0 0 1;
+  }
+  .tab-content {
+    overflow: auto;
+    flex: 1 1 100%;
+  }
+`;
+
+const ControlPanelsTabs = styled(Tabs)`
+  ${({ fullWidth }) =>
+    css`
+      .ant-tabs-nav-list {
+        width: ${fullWidth ? '100%' : '50%'};
+      }
+    `}
+`;
+
 class ControlPanelsContainer extends React.Component {
   constructor(props) {
     super(props);
 
-    this.getControlData = this.getControlData.bind(this);
     this.removeAlert = this.removeAlert.bind(this);
     this.renderControl = this.renderControl.bind(this);
     this.renderControlPanelSection = this.renderControlPanelSection.bind(this);
-  }
-
-  getControlData(controlName) {
-    if (React.isValidElement(controlName)) {
-      return controlName;
-    }
-
-    const control = this.props.controls[controlName];
-    // Identifying mapStateToProps function to apply (logic can't be in store)
-    let mapF = controlConfigs[controlName].mapStateToProps;
-
-    // Looking to find mapStateToProps override for this viz type
-    const controlPanelConfig =
-      getChartControlPanelRegistry().get(this.props.controls.viz_type.value) ||
-      {};
-    const controlOverrides = controlPanelConfig.controlOverrides || {};
-    if (
-      controlOverrides[controlName] &&
-      controlOverrides[controlName].mapStateToProps
-    ) {
-      mapF = controlOverrides[controlName].mapStateToProps;
-    }
-    // Applying mapStateToProps if needed
-    if (mapF) {
-      return Object.assign(
-        {},
-        control,
-        mapF(this.props.exploreState, control, this.props.actions),
-      );
-    }
-    return control;
   }
 
   sectionsToRender() {
@@ -95,42 +93,37 @@ class ControlPanelsContainer extends React.Component {
     this.props.actions.removeControlPanelAlert();
   }
 
-  renderControl(name, config, lookupControlData) {
-    const { actions, controls, exploreState, form_data: formData } = this.props;
-
-    // Looking to find mapStateToProps override for this viz type
-    const controlPanelConfig =
-      getChartControlPanelRegistry().get(controls.viz_type.value) || {};
-    const controlOverrides = controlPanelConfig.controlOverrides || {};
-    const overrides = controlOverrides[name];
-
-    // Identifying mapStateToProps function to apply (logic can't be in store)
-    const mapFn =
-      overrides && overrides.mapStateToProps
-        ? overrides.mapStateToProps
-        : config.mapStateToProps;
+  renderControl({ name, config }) {
+    const { actions, controls, form_data: formData } = this.props;
+    const { visibility } = config;
 
     // If the control item is not an object, we have to look up the control data from
     // the centralized controls file.
     // When it is an object we read control data straight from `config` instead
-    const controlData = lookupControlData ? controls[name] : config;
+    const controlData = {
+      ...config,
+      ...controls[name],
+      name,
+    };
+    const {
+      validationErrors,
+      provideFormDataToProps,
+      ...restProps
+    } = controlData;
 
-    // Applying mapStateToProps if needed
-    const additionalProps = mapFn
-      ? { ...controlData, ...mapFn(exploreState, controlData, actions) }
-      : controlData;
-
-    const { validationErrors, provideFormDataToProps } = controlData;
+    // if visibility check says the config is not visible, don't render it
+    if (visibility && !visibility.call(config, this.props, controlData)) {
+      return null;
+    }
 
     return (
       <Control
-        name={name}
         key={`control-${name}`}
-        value={formData[name]}
+        name={name}
         validationErrors={validationErrors}
         actions={actions}
         formData={provideFormDataToProps ? formData : null}
-        {...additionalProps}
+        {...restProps}
       />
     );
   }
@@ -155,52 +148,54 @@ class ControlPanelsContainer extends React.Component {
         hasErrors={hasErrors}
         description={section.description}
       >
-        {section.controlSetRows.map((controlSets, i) => (
-          <ControlRow
-            key={`controlsetrow-${i}`}
-            className="control-row"
-            controls={controlSets.map(controlItem => {
+        {section.controlSetRows.map((controlSets, i) => {
+          const renderedControls = controlSets
+            .map(controlItem => {
               if (!controlItem) {
                 // When the item is invalid
                 return null;
-              } else if (React.isValidElement(controlItem)) {
+              }
+              if (React.isValidElement(controlItem)) {
                 // When the item is a React element
                 return controlItem;
-              } else if (
-                isPlainObject(controlItem) &&
-                controlItem.name &&
-                controlItem.config
-              ) {
-                const { name, config } = controlItem;
-
-                return this.renderControl(name, config, false);
-              } else if (controls[controlItem]) {
-                // When the item is string name, meaning the control config
-                // is not specified directly. Have to look up the config from
-                // centralized configs.
-                const name = controlItem;
-
-                return this.renderControl(name, controlConfigs[name], true);
+              }
+              if (controlItem.name && controlItem.config) {
+                return this.renderControl(controlItem);
               }
               return null;
-            })}
-          />
-        ))}
+            })
+            .filter(x => x !== null);
+          // don't show the row if it is empty
+          if (renderedControls.length === 0) {
+            return null;
+          }
+          return (
+            <ControlRow
+              key={`controlsetrow-${i}`}
+              className="control-row"
+              controls={renderedControls}
+            />
+          );
+        })}
       </ControlPanelSection>
     );
   }
+
   render() {
-    const allSectionsToRender = this.sectionsToRender();
     const querySectionsToRender = [];
     const displaySectionsToRender = [];
-    allSectionsToRender.forEach(section => {
+    this.sectionsToRender().forEach(section => {
+      // if at least one control in the section is not `renderTrigger`
+      // or asks to be displayed at the Data tab
       if (
+        section.tabOverride === 'data' ||
         section.controlSetRows.some(rows =>
           rows.some(
             control =>
-              controlConfigs[control] &&
-              (!controlConfigs[control].renderTrigger ||
-                controlConfigs[control].tabOverride === 'data'),
+              control &&
+              control.config &&
+              (!control.config.renderTrigger ||
+                control.config.tabOverride === 'data'),
           ),
         )
       ) {
@@ -210,31 +205,37 @@ class ControlPanelsContainer extends React.Component {
       }
     });
 
+    const showCustomizeTab = displaySectionsToRender.length > 0;
     return (
-      <div className="scrollbar-container">
-        <div className="scrollbar-content">
-          {this.props.alert && (
-            <Alert bsStyle="warning">
-              {this.props.alert}
-              <i
-                className="fa fa-close pull-right"
-                onClick={this.removeAlert}
-                style={{ cursor: 'pointer' }}
-              />
-            </Alert>
+      <Styles>
+        {this.props.alert && (
+          <Alert bsStyle="warning">
+            {this.props.alert}
+            <i
+              role="button"
+              aria-label="Remove alert"
+              tabIndex={0}
+              className="fa fa-close pull-right"
+              onClick={this.removeAlert}
+              style={{ cursor: 'pointer' }}
+            />
+          </Alert>
+        )}
+        <ControlPanelsTabs
+          id="controlSections"
+          data-test="control-tabs"
+          fullWidth={showCustomizeTab}
+        >
+          <Tabs.TabPane key="query" tab={t('Data')}>
+            {querySectionsToRender.map(this.renderControlPanelSection)}
+          </Tabs.TabPane>
+          {showCustomizeTab && (
+            <Tabs.TabPane key="display" tab={t('Customize')}>
+              {displaySectionsToRender.map(this.renderControlPanelSection)}
+            </Tabs.TabPane>
           )}
-          <Tabs id="controlSections">
-            <Tab eventKey="query" title={t('Data')}>
-              {querySectionsToRender.map(this.renderControlPanelSection)}
-            </Tab>
-            {displaySectionsToRender.length > 0 && (
-              <Tab eventKey="display" title={t('Customize')}>
-                {displaySectionsToRender.map(this.renderControlPanelSection)}
-              </Tab>
-            )}
-          </Tabs>
-        </div>
-      </div>
+        </ControlPanelsTabs>
+      </Styles>
     );
   }
 }

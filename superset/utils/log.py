@@ -19,74 +19,146 @@ import inspect
 import json
 import logging
 import textwrap
+import time
 from abc import ABC, abstractmethod
-from datetime import datetime
-from typing import Any, cast, Type
+from contextlib import contextmanager
+from typing import Any, Callable, cast, Iterator, Optional, Type
 
 from flask import current_app, g, request
+from sqlalchemy.exc import SQLAlchemyError
+
+from superset.stats_logger import BaseStatsLogger
+
+
+def strip_int_from_path(path: Optional[str]) -> str:
+    """Simple function to remove ints from '/' separated paths"""
+    if path:
+        return "/".join(["<int>" if s.isdigit() else s for s in path.split("/")])
+    return ""
 
 
 class AbstractEventLogger(ABC):
     @abstractmethod
-    def log(self, user_id, action, *args, **kwargs):
+    def log(  # pylint: disable=too-many-arguments
+        self,
+        user_id: Optional[int],
+        action: str,
+        dashboard_id: Optional[int],
+        duration_ms: Optional[int],
+        slice_id: Optional[int],
+        referrer: Optional[str],
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         pass
 
-    def log_this(self, f):
+    @contextmanager
+    def log_context(
+        self, action: str, ref: Optional[str] = None, log_to_statsd: bool = True,
+    ) -> Iterator[Callable[..., None]]:
+        """
+        Log an event while reading information from the request context.
+        `kwargs` will be appended directly to the log payload.
+        """
+        from superset.views.core import get_form_data
+
+        start_time = time.time()
+        referrer = request.referrer[:1000] if request.referrer else None
+        user_id = g.user.get_id() if hasattr(g, "user") and g.user else None
+        payload = request.form.to_dict() or {}
+        # request parameters can overwrite post body
+        payload.update(request.args.to_dict())
+
+        # yield a helper to update additional kwargs
+        yield lambda **kwargs: payload.update(kwargs)
+
+        dashboard_id = payload.get("dashboard_id")
+
+        if "form_data" in payload:
+            form_data, _ = get_form_data()
+            payload["form_data"] = form_data
+            slice_id = form_data.get("slice_id")
+        else:
+            slice_id = payload.get("slice_id")
+
+        try:
+            slice_id = int(slice_id)  # type: ignore
+        except (TypeError, ValueError):
+            slice_id = 0
+
+        if log_to_statsd:
+            self.stats_logger.incr(action)
+
+        payload.update(
+            {
+                "path": request.path,
+                "path_no_param": strip_int_from_path(request.path),
+                "ref": ref,
+            }
+        )
+        # bulk insert
+        try:
+            explode_by = payload.get("explode")
+            records = json.loads(payload.get(explode_by))  # type: ignore
+        except Exception:  # pylint: disable=broad-except
+            records = [payload]
+
+        self.log(
+            user_id,
+            action,
+            records=records,
+            dashboard_id=dashboard_id,
+            slice_id=slice_id,
+            duration_ms=round((time.time() - start_time) * 1000),
+            referrer=referrer,
+        )
+
+    def _wrapper(
+        self, f: Callable[..., Any], **wrapper_kwargs: Any
+    ) -> Callable[..., Any]:
+        action_str = wrapper_kwargs.get("action") or f.__name__
+        ref = f.__qualname__ if hasattr(f, "__qualname__") else None
+
         @functools.wraps(f)
-        def wrapper(*args, **kwargs):
-            user_id = None
-            if g.user:
-                user_id = g.user.get_id()
-            d = request.form.to_dict() or {}
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            with self.log_context(action_str, ref, **wrapper_kwargs) as log:
+                value = f(*args, **kwargs)
+                log(**kwargs)
+            return value
 
-            # request parameters can overwrite post body
-            request_params = request.args.to_dict()
-            d.update(request_params)
-            d.update(kwargs)
+        return wrapper
 
-            slice_id = d.get("slice_id")
-            dashboard_id = d.get("dashboard_id")
+    def log_this(self, f: Callable[..., Any]) -> Callable[..., Any]:
+        """Decorator that uses the function name as the action"""
+        return self._wrapper(f)
 
-            try:
-                slice_id = int(
-                    slice_id or json.loads(d.get("form_data")).get("slice_id")
-                )
-            except (ValueError, TypeError):
-                slice_id = 0
+    def log_this_with_context(self, **kwargs: Any) -> Callable[..., Any]:
+        """Decorator that can override kwargs of log_context"""
 
-            self.stats_logger.incr(f.__name__)
-            start_dttm = datetime.now()
-            value = f(*args, **kwargs)
-            duration_ms = (datetime.now() - start_dttm).total_seconds() * 1000
+        def func(f: Callable[..., Any]) -> Callable[..., Any]:
+            return self._wrapper(f, **kwargs)
 
-            # bulk insert
-            try:
-                explode_by = d.get("explode")
-                records = json.loads(d.get(explode_by))
-            except Exception:  # pylint: disable=broad-except
-                records = [d]
+        return func
 
-            referrer = request.referrer[:1000] if request.referrer else None
+    def log_manually(self, f: Callable[..., Any]) -> Callable[..., Any]:
+        """Allow a function to manually update"""
 
-            self.log(
-                user_id,
-                f.__name__,
-                records=records,
-                dashboard_id=dashboard_id,
-                slice_id=slice_id,
-                duration_ms=duration_ms,
-                referrer=referrer,
-            )
+        @functools.wraps(f)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            with self.log_context(f.__name__) as log:
+                # updated_log_payload should be either the last positional
+                # argument or one of the named arguments of the decorated function
+                value = f(*args, update_log_payload=log, **kwargs)
             return value
 
         return wrapper
 
     @property
-    def stats_logger(self):
+    def stats_logger(self) -> BaseStatsLogger:
         return current_app.config["STATS_LOGGER"]
 
 
-def get_event_logger_from_cfg_value(cfg_value: object) -> AbstractEventLogger:
+def get_event_logger_from_cfg_value(cfg_value: Any) -> AbstractEventLogger:
     """
     This function implements the deprecation of assignment
     of class objects to EVENT_LOGGER configuration, and validates
@@ -115,7 +187,7 @@ def get_event_logger_from_cfg_value(cfg_value: object) -> AbstractEventLogger:
             )
         )
 
-        event_logger_type = cast(Type, cfg_value)
+        event_logger_type = cast(Type[Any], cfg_value)
         result = event_logger_type()
 
     # Verify that we have a valid logger impl
@@ -125,22 +197,31 @@ def get_event_logger_from_cfg_value(cfg_value: object) -> AbstractEventLogger:
             "of superset.utils.log.AbstractEventLogger."
         )
 
-    logging.info(f"Configured event logger of type {type(result)}")
+    logging.info("Configured event logger of type %s", type(result))
     return cast(AbstractEventLogger, result)
 
 
 class DBEventLogger(AbstractEventLogger):
-    def log(self, user_id, action, *args, **kwargs):  # pylint: disable=too-many-locals
+    """Event logger that commits logs to Superset DB"""
+
+    def log(  # pylint: disable=too-many-arguments,too-many-locals
+        self,
+        user_id: Optional[int],
+        action: str,
+        dashboard_id: Optional[int],
+        duration_ms: Optional[int],
+        slice_id: Optional[int],
+        referrer: Optional[str],
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         from superset.models.core import Log
 
         records = kwargs.get("records", list())
-        dashboard_id = kwargs.get("dashboard_id")
-        slice_id = kwargs.get("slice_id")
-        duration_ms = kwargs.get("duration_ms")
-        referrer = kwargs.get("referrer")
 
         logs = list()
         for record in records:
+            json_string: Optional[str]
             try:
                 json_string = json.dumps(record)
             except Exception:  # pylint: disable=broad-except
@@ -155,7 +236,10 @@ class DBEventLogger(AbstractEventLogger):
                 user_id=user_id,
             )
             logs.append(log)
-
-        sesh = current_app.appbuilder.get_session
-        sesh.bulk_save_objects(logs)
-        sesh.commit()
+        try:
+            sesh = current_app.appbuilder.get_session
+            sesh.bulk_save_objects(logs)
+            sesh.commit()
+        except SQLAlchemyError as ex:
+            logging.error("DBEventLogger failed to log event(s)")
+            logging.exception(ex)

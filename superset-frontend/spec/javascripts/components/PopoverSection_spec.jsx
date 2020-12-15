@@ -19,7 +19,7 @@
 import React from 'react';
 import { shallow } from 'enzyme';
 
-import PopoverSection from '../../../src/components/PopoverSection';
+import PopoverSection from 'src/components/PopoverSection';
 
 describe('PopoverSection', () => {
   const defaultProps = {
@@ -32,7 +32,7 @@ describe('PopoverSection', () => {
 
   let wrapper;
   const factory = overrideProps => {
-    const props = Object.assign({}, defaultProps, overrideProps || {});
+    const props = { ...defaultProps, ...(overrideProps || {}) };
     return shallow(<PopoverSection {...props} />);
   };
   beforeEach(() => {
@@ -44,7 +44,7 @@ describe('PopoverSection', () => {
     );
   });
   it('is show an icon when selected', () => {
-    expect(wrapper.find('.fa-check')).toHaveLength(1);
+    expect(wrapper.find('.fa-check')).toExist();
   });
   it('is show no icon when not selected', () => {
     expect(factory({ isSelected: false }).find('.fa-check')).toHaveLength(0);

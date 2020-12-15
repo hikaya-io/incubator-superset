@@ -18,9 +18,8 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
+import { ColumnOption, MetricOption } from '@superset-ui/chart-controls';
 
-import MetricOption from '../../components/MetricOption';
-import ColumnOption from '../../components/ColumnOption';
 import AggregateOption from './AggregateOption';
 import columnType from '../propTypes/columnType';
 import savedMetricType from '../propTypes/savedMetricType';
@@ -39,9 +38,11 @@ const propTypes = {
 function MetricDefinitionOption({ option, addWarningToast }) {
   if (option.metric_name) {
     return <MetricOption metric={option} showType />;
-  } else if (option.column_name) {
+  }
+  if (option.column_name) {
     return <ColumnOption column={option} showType />;
-  } else if (option.aggregate_name) {
+  }
+  if (option.aggregate_name) {
     return <AggregateOption aggregate={option} showType />;
   }
   addWarningToast(

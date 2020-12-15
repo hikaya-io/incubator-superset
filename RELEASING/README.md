@@ -63,48 +63,64 @@ final release. Therefore, it's a good idea to do the following every time you
 work on a new phase of the release process to make sure you aren't releasing
 the wrong files/using wrong names. There's a script to help you set correctly all the
 necessary environment variables. Change your current directory to `superset/RELEASING`
+and execute the `set_release_env.sh` script with the relevant parameters:
 
+Usage (BASH):
 ```bash
-    # usage: . set_release_env.sh <SUPERSET_VERSION_RC> <PGP_KEY_FULLNAME>
-    # example: . set_release_env.sh 0.35.2rc1 myid@apache.org
+    . set_release_env.sh <SUPERSET_RC_VERSION> <PGP_KEY_FULLNAME>
 ```
 
-The script will output the exported variables. Here's example for 0.35.2rc2:
+Usage (ZSH):
+```bash
+    source set_release_env.sh <SUPERSET_RC_VERSION> <PGP_KEY_FULLNAME>
+```
+
+Example:
+```bash
+    source set_release_env.sh 0.38.0rc1 myid@apache.org
+```
+
+The script will output the exported variables. Here's example for 0.38.0rc1:
 
 ```
-    -------------------------------
     Set Release env variables
-    SUPERSET_PGP_FULLNAME=myid@apache.org
-    SUPERSET_VERSION_RC=0.35.2rc1
-    SUPERSET_GITHUB_BRANCH=0.35
-    SUPERSET_TMP_ASF_SITE_PATH=/tmp/incubator-superset-site-0.35.2
-    SUPERSET_RELEASE_RC=apache-superset-incubating-0.35.2rc1
-    SUPERSET_RELEASE_RC_TARBALL=apache-superset-incubating-0.35.2rc1-source.tar.gz
+    SUPERSET_VERSION=0.38.0
     SUPERSET_RC=1
-    SUPERSET_CONFIG_PATH=/Users/ville/superset/superset_config.py
-    SUPERSET_RELEASE=apache-superset-incubating-0.35.2
-    SUPERSET_RELEASE_TARBALL=apache-superset-incubating-0.35.2-source.tar.gz
-    SUPERSET_VERSION=0.35.2
-    -------------------------------
+    SUPERSET_GITHUB_BRANCH=0.38
+    SUPERSET_PGP_FULLNAME=myid@apache.org
+    SUPERSET_VERSION_RC=0.38.0rc1
+    SUPERSET_RELEASE=apache-superset-incubating-0.38.0
+    SUPERSET_RELEASE_RC=apache-superset-incubating-0.38.0rc1
+    SUPERSET_RELEASE_TARBALL=apache-superset-incubating-0.38.0-source.tar.gz
+    SUPERSET_RELEASE_RC_TARBALL=apache-superset-incubating-0.38.0rc1-source.tar.gz
+    SUPERSET_TMP_ASF_SITE_PATH=/tmp/incubator-superset-site-0.38.0
 ```
 
 ## Crafting a source release
 
 When crafting a new minor or major release we create
-a branch named with the release MAJOR.MINOR version (on this example 0.35).
+a branch named with the release MAJOR.MINOR version (on this example 0.37).
 This new branch will hold all PATCH and release candidates
 that belong to the MAJOR.MINOR version.
 
 The MAJOR.MINOR branch is normally a "cut" from a specific point in time from the master branch.
-Then (if needed) apply all cherries that will make the PATCH
-
-Next update the `CHANGELOG.md` with all the changes that are included in the release. Make sure you have
-set your GITHUB_TOKEN environment variable.
+Then (if needed) apply all cherries that will make the PATCH.
 
 ```bash
-# will overwrites the local CHANGELOG.md, somehow you need to merge it in
-github-changes -o apache -r incubator-superset --token $GITHUB_TOKEN -b $SUPERSET_GITHUB_BRANCH
+git checkout -b $SUPERSET_GITHUB_BRANCH
+git push upstream $SUPERSET_GITHUB_BRANCH
 ```
+
+Next, update the `CHANGELOG.md` with all the changes that are included in the release.
+Make sure the branch has been pushed to `upstream` to ensure the changelog generator
+can pick up changes since the previous release.
+
+Example:
+```bash
+python changelog.py --previous_version 0.37 --current_version 0.38 changelog
+```
+
+The script will checkout both branches and compare all the PR's, copy the output and paste it on the `CHANGELOG.md`
 
 Then, in `UPDATING.md`, a file that contains a list of notifications around
 deprecations and upgrading-related topics,
@@ -114,10 +130,19 @@ section for the new release.
 Finally bump the version number on `superset-frontend/package.json` (replace with whichever version is being released excluding the RC version):
 
 ```json
-    "version": "0.35.2"
+    "version": "0.38.0"
 ```
 
-Commit the change with the version number, then git tag the version with the release candidate and push to the branch
+Commit the change with the version number, then git tag the version with the release candidate and push to the branch:
+
+```
+    # add changed files and commit
+    git add ...
+    git commit ...
+    # push new tag
+    git tag ${SUPERSET_VERSION_RC}
+    git push upstream ${SUPERSET_VERSION_RC}
+```
 
 ## Preparing the release candidate
 
@@ -282,9 +307,9 @@ with the changes on `CHANGELOG.md` and `UPDATING.md`.
 
 ### Publishing a Convenience Release to PyPI
 
-From the root of the repo running ./pypi_push.sh will build the
-Javascript bundle and echo the twine command allowing you to publish
-to PyPI. You may need to ask a fellow committer to grant
+Using the final release tarball, unpack it and run `./pypi_push.sh`.
+This script will build the Javascript bundle and echo the twine command
+allowing you to publish to PyPI. You may need to ask a fellow committer to grant
 you access to it if you don't have access already. Make sure to create
 an account first if you don't have one, and reference your username
 while requesting access to push packages.
@@ -298,22 +323,9 @@ Once it's all done, an [ANNOUNCE] thread announcing the release to the dev@ mail
     (venv)$ python send_email.py announce
 ```
 
-## Post release
+### Github Release
 
-#### Refresh documentation website
-
-Every once in a while we want to compile the documentation and publish it.
-Here's how to do it.
-
-```bash
-./make_docs.sh
-```
-
-Superset documentation site is ready at http://localhost:5002
-
-```
-$ cd /tmp/incubator-superset-site-${SUPERSET_VERSION}
-$ git add .
-$ git commit -a -m "New doc version ${SUPERSET_VERSION}"
-$ git push origin asf-site
-```
+Finally, so the Github UI reflects the latest release, you should create a release from the
+tag corresponding with the new version. Go to https://github.com/apache/incubator-superset/tags,
+click the 3-dot icon and select `Create Release`, paste the content of the ANNOUNCE thread in the
+release notes, and publish the new release.

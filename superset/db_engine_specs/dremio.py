@@ -20,8 +20,9 @@ from superset.db_engine_specs.base import BaseEngineSpec
 class DremioBaseEngineSpec(BaseEngineSpec):
 
     engine = "dremio"
+    engine_name = "Dremio"
 
-    _time_grain_functions = {
+    _time_grain_expressions = {
         None: "{col}",
         "PT1S": "DATE_TRUNC('second', {col})",
         "PT1M": "DATE_TRUNC('minute', {col})",

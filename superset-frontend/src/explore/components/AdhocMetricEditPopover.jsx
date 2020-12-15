@@ -18,32 +18,20 @@
  */
 import React from 'react';
 import PropTypes from 'prop-types';
-import {
-  Button,
-  ControlLabel,
-  FormGroup,
-  Popover,
-  Tab,
-  Tabs,
-} from 'react-bootstrap';
-import VirtualizedSelect from 'react-virtualized-select';
-import ace from 'brace';
-import AceEditor from 'react-ace';
-import 'brace/mode/sql';
-import 'brace/theme/github';
-import 'brace/ext/language_tools';
-import { t } from '@superset-ui/translation';
+import { FormGroup } from 'react-bootstrap';
+import Tabs from 'src/common/components/Tabs';
+import Button from 'src/components/Button';
+import Select from 'src/components/Select';
+import { styled, t } from '@superset-ui/core';
+import { ColumnOption } from '@superset-ui/chart-controls';
 
-import { AGGREGATES } from '../constants';
-import VirtualizedRendererWrap from '../../components/VirtualizedRendererWrap';
-import OnPasteSelect from '../../components/OnPasteSelect';
-import AdhocMetricEditPopoverTitle from './AdhocMetricEditPopoverTitle';
+import FormLabel from 'src/components/FormLabel';
+import { SQLEditor } from 'src/components/AsyncAceEditor';
+import sqlKeywords from 'src/SqlLab/utils/sqlKeywords';
+
+import { AGGREGATES_OPTIONS } from '../constants';
 import columnType from '../propTypes/columnType';
 import AdhocMetric, { EXPRESSION_TYPES } from '../AdhocMetric';
-import ColumnOption from '../../components/ColumnOption';
-import sqlKeywords from '../../SqlLab/utils/sqlKeywords';
-
-const langTools = ace.acequire('ace/ext/language_tools');
 
 const propTypes = {
   adhocMetric: PropTypes.instanceOf(AdhocMetric).isRequired,
@@ -52,14 +40,22 @@ const propTypes = {
   onResize: PropTypes.func.isRequired,
   columns: PropTypes.arrayOf(columnType),
   datasourceType: PropTypes.string,
+  title: PropTypes.shape({
+    label: PropTypes.string,
+    hasCustomLabel: PropTypes.bool,
+  }),
 };
 
 const defaultProps = {
   columns: [],
 };
 
-const startingWidth = 300;
-const startingHeight = 180;
+const ResizeIcon = styled.i`
+  margin-left: ${({ theme }) => theme.gridUnit * 2}px;
+`;
+
+const startingWidth = 320;
+const startingHeight = 240;
 
 export default class AdhocMetricEditPopover extends React.Component {
   constructor(props) {
@@ -68,41 +64,33 @@ export default class AdhocMetricEditPopover extends React.Component {
     this.onColumnChange = this.onColumnChange.bind(this);
     this.onAggregateChange = this.onAggregateChange.bind(this);
     this.onSqlExpressionChange = this.onSqlExpressionChange.bind(this);
-    this.onLabelChange = this.onLabelChange.bind(this);
     this.onDragDown = this.onDragDown.bind(this);
     this.onMouseMove = this.onMouseMove.bind(this);
     this.onMouseUp = this.onMouseUp.bind(this);
     this.handleAceEditorRef = this.handleAceEditorRef.bind(this);
     this.refreshAceEditor = this.refreshAceEditor.bind(this);
+
+    this.popoverRef = React.createRef();
+
     this.state = {
       adhocMetric: this.props.adhocMetric,
       width: startingWidth,
       height: startingHeight,
     };
+
     this.selectProps = {
-      multi: false,
-      name: 'select-column',
       labelKey: 'label',
+      isMulti: false,
       autosize: false,
       clearable: true,
-      selectWrap: VirtualizedSelect,
     };
-    if (langTools) {
-      const words = sqlKeywords.concat(
-        this.props.columns.map(column => ({
-          name: column.column_name,
-          value: column.column_name,
-          score: 50,
-          meta: 'column',
-        })),
-      );
-      const completer = {
-        getCompletions: (aceEditor, session, pos, prefix, callback) => {
-          callback(null, words);
-        },
-      };
-      langTools.setCompleters([completer]);
-    }
+
+    this.menuPortalProps = {
+      menuPosition: 'fixed',
+      menuPlacement: 'bottom',
+      menuPortalTarget: this.popoverRef.current,
+    };
+
     document.addEventListener('mouseup', this.onMouseUp);
   }
 
@@ -112,45 +100,50 @@ export default class AdhocMetricEditPopover extends React.Component {
   }
 
   onSave() {
-    this.props.onChange(this.state.adhocMetric);
+    const { title } = this.props;
+    const { hasCustomLabel } = title;
+    let { label } = title;
+    const { adhocMetric } = this.state;
+    const metricLabel = adhocMetric.label;
+    if (!hasCustomLabel) {
+      label = metricLabel;
+    }
+    this.props.onChange({
+      ...adhocMetric,
+      label,
+      hasCustomLabel,
+      // unset isNew here in case save button was clicked when no changes were made
+      isNew: false,
+    });
     this.props.onClose();
   }
 
   onColumnChange(column) {
-    this.setState({
-      adhocMetric: this.state.adhocMetric.duplicateWith({
+    this.setState(prevState => ({
+      adhocMetric: prevState.adhocMetric.duplicateWith({
         column,
         expressionType: EXPRESSION_TYPES.SIMPLE,
       }),
-    });
+    }));
   }
 
   onAggregateChange(aggregate) {
     // we construct this object explicitly to overwrite the value in the case aggregate is null
-    this.setState({
-      adhocMetric: this.state.adhocMetric.duplicateWith({
-        aggregate: aggregate && aggregate.aggregate,
+    this.setState(prevState => ({
+      adhocMetric: prevState.adhocMetric.duplicateWith({
+        aggregate,
         expressionType: EXPRESSION_TYPES.SIMPLE,
       }),
-    });
+    }));
   }
 
   onSqlExpressionChange(sqlExpression) {
-    this.setState({
-      adhocMetric: this.state.adhocMetric.duplicateWith({
+    this.setState(prevState => ({
+      adhocMetric: prevState.adhocMetric.duplicateWith({
         sqlExpression,
         expressionType: EXPRESSION_TYPES.SQL,
       }),
-    });
-  }
-
-  onLabelChange(e) {
-    this.setState({
-      adhocMetric: this.state.adhocMetric.duplicateWith({
-        label: e.target.value,
-        hasCustomLabel: true,
-      }),
-    });
+    }));
   }
 
   onDragDown(e) {
@@ -186,7 +179,15 @@ export default class AdhocMetricEditPopover extends React.Component {
   }
 
   refreshAceEditor() {
-    setTimeout(() => this.aceEditorRef.editor.resize(), 0);
+    setTimeout(() => {
+      if (this.aceEditorRef) {
+        this.aceEditorRef.editor.resize();
+      }
+    }, 0);
+  }
+
+  renderColumnOption(option) {
+    return <ColumnOption column={option} showType />;
   }
 
   render() {
@@ -201,6 +202,14 @@ export default class AdhocMetricEditPopover extends React.Component {
     } = this.props;
 
     const { adhocMetric } = this.state;
+    const keywords = sqlKeywords.concat(
+      columns.map(column => ({
+        name: column.column_name,
+        value: column.column_name,
+        score: 50,
+        meta: 'column',
+      })),
+    );
 
     const columnSelectProps = {
       placeholder: t('%s column(s)', columns.length),
@@ -209,82 +218,82 @@ export default class AdhocMetricEditPopover extends React.Component {
         (adhocMetric.column && adhocMetric.column.column_name) ||
         adhocMetric.inferSqlExpressionColumn(),
       onChange: this.onColumnChange,
-      optionRenderer: VirtualizedRendererWrap(option => (
-        <ColumnOption column={option} showType />
-      )),
-      valueRenderer: column => column.column_name,
+      optionRenderer: this.renderColumnOption,
       valueKey: 'column_name',
     };
 
     const aggregateSelectProps = {
-      placeholder: t('%s aggregates(s)', Object.keys(AGGREGATES).length),
-      options: Object.keys(AGGREGATES).map(aggregate => ({ aggregate })),
+      placeholder: t('%s aggregates(s)', AGGREGATES_OPTIONS.length),
+      options: AGGREGATES_OPTIONS,
       value: adhocMetric.aggregate || adhocMetric.inferSqlExpressionAggregate(),
       onChange: this.onAggregateChange,
-      optionRenderer: VirtualizedRendererWrap(aggregate => aggregate.aggregate),
-      valueRenderer: aggregate => aggregate.aggregate,
-      valueKey: 'aggregate',
     };
 
     if (this.props.datasourceType === 'druid') {
       aggregateSelectProps.options = aggregateSelectProps.options.filter(
-        option => option.aggregate !== 'AVG',
+        aggregate => aggregate !== 'AVG',
       );
     }
-
-    const popoverTitle = (
-      <AdhocMetricEditPopoverTitle
-        adhocMetric={adhocMetric}
-        onChange={this.onLabelChange}
-      />
-    );
 
     const stateIsValid = adhocMetric.isValid();
     const hasUnsavedChanges = !adhocMetric.equals(propsAdhocMetric);
     return (
-      <Popover id="metrics-edit-popover" title={popoverTitle} {...popoverProps}>
+      <div
+        id="metrics-edit-popover"
+        data-test="metrics-edit-popover"
+        ref={this.popoverRef}
+        {...popoverProps}
+      >
         <Tabs
           id="adhoc-metric-edit-tabs"
+          data-test="adhoc-metric-edit-tabs"
           defaultActiveKey={adhocMetric.expressionType}
           className="adhoc-metric-edit-tabs"
           style={{ height: this.state.height, width: this.state.width }}
-          onSelect={this.refreshAceEditor}
-          animation={false}
+          onChange={this.refreshAceEditor}
         >
-          <Tab
+          <Tabs.TabPane
             className="adhoc-metric-edit-tab"
-            eventKey={EXPRESSION_TYPES.SIMPLE}
-            title="Simple"
+            key={EXPRESSION_TYPES.SIMPLE}
+            tab="Simple"
           >
             <FormGroup>
-              <ControlLabel>
+              <FormLabel>
                 <strong>column</strong>
-              </ControlLabel>
-              <OnPasteSelect {...this.selectProps} {...columnSelectProps} />
-            </FormGroup>
-            <FormGroup>
-              <ControlLabel>
-                <strong>aggregate</strong>
-              </ControlLabel>
-              <OnPasteSelect
-                autoFocus
+              </FormLabel>
+              <Select
+                name="select-column"
                 {...this.selectProps}
-                {...aggregateSelectProps}
+                {...this.menuPortalProps}
+                {...columnSelectProps}
               />
             </FormGroup>
-          </Tab>
-          <Tab
+            <FormGroup>
+              <FormLabel>
+                <strong>aggregate</strong>
+              </FormLabel>
+              <Select
+                name="select-aggregate"
+                {...this.selectProps}
+                {...this.menuPortalProps}
+                {...aggregateSelectProps}
+                autoFocus
+              />
+            </FormGroup>
+          </Tabs.TabPane>
+          <Tabs.TabPane
             className="adhoc-metric-edit-tab"
-            eventKey={EXPRESSION_TYPES.SQL}
-            title="Custom SQL"
+            key={EXPRESSION_TYPES.SQL}
+            tab="Custom SQL"
+            data-test="adhoc-metric-edit-tab#custom"
           >
             {this.props.datasourceType !== 'druid' ? (
-              <FormGroup>
-                <AceEditor
+              <FormGroup data-test="sql-editor">
+                <SQLEditor
+                  showLoadingForImport
                   ref={this.handleAceEditorRef}
-                  mode="sql"
-                  theme="github"
-                  height={this.state.height - 43 + 'px'}
+                  keywords={keywords}
+                  height={`${this.state.height - 80}px`}
                   onChange={this.onSqlExpressionChange}
                   width="100%"
                   showGutter={false}
@@ -302,27 +311,38 @@ export default class AdhocMetricEditPopover extends React.Component {
                 Custom SQL Metrics are not available on druid datasources
               </div>
             )}
-          </Tab>
+          </Tabs.TabPane>
         </Tabs>
         <div>
           <Button
+            buttonSize="small"
+            onClick={this.props.onClose}
+            data-test="AdhocMetricEdit#cancel"
+            cta
+          >
+            Close
+          </Button>
+          <Button
             disabled={!stateIsValid}
-            bsStyle={hasUnsavedChanges && stateIsValid ? 'primary' : 'default'}
-            bsSize="small"
-            className="m-r-5"
+            buttonStyle={
+              hasUnsavedChanges && stateIsValid ? 'primary' : 'default'
+            }
+            buttonSize="small"
+            data-test="AdhocMetricEdit#save"
             onClick={this.onSave}
+            cta
           >
             Save
           </Button>
-          <Button bsSize="small" onClick={this.props.onClose}>
-            Close
-          </Button>
-          <i
+          <ResizeIcon
+            role="button"
+            aria-label="Resize"
+            tabIndex={0}
             onMouseDown={this.onDragDown}
-            className="glyphicon glyphicon-resize-full edit-popover-resize"
+            className="fa fa-expand edit-popover-resize text-muted"
           />
         </div>
-      </Popover>
+      </div>
     );
   }
 }

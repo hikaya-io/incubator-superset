@@ -18,14 +18,13 @@
  */
 import React from 'react';
 import { shallow } from 'enzyme';
-import Header from '../../../../src/dashboard/components/Header';
-import EditableTitle from '../../../../src/components/EditableTitle';
-import FaveStar from '../../../../src/components/FaveStar';
-import PublishedStatus from '../../../../src/dashboard/components/PublishedStatus';
-import HeaderActionsDropdown from '../../../../src/dashboard/components/HeaderActionsDropdown';
-import Button from '../../../../src/components/Button';
-import UndoRedoKeylisteners from '../../../../src/dashboard/components/UndoRedoKeylisteners';
-import { BUILDER_PANE_TYPE } from '../../../../src/dashboard/util/constants';
+import Header from 'src/dashboard/components/Header';
+import EditableTitle from 'src/components/EditableTitle';
+import FaveStar from 'src/components/FaveStar';
+import PublishedStatus from 'src/dashboard/components/PublishedStatus';
+import HeaderActionsDropdown from 'src/dashboard/components/HeaderActionsDropdown';
+import Button from 'src/components/Button';
+import UndoRedoKeylisteners from 'src/dashboard/components/UndoRedoKeylisteners';
 
 describe('Header', () => {
   const props = {
@@ -36,6 +35,10 @@ describe('Header', () => {
       dash_edit_perm: true,
       dash_save_perm: true,
       userId: 1,
+      metadata: {},
+      common: {
+        conf: {},
+      },
     },
     dashboardTitle: 'title',
     charts: {},
@@ -50,12 +53,11 @@ describe('Header', () => {
     fetchCharts: () => {},
     saveFaveStar: () => {},
     savePublished: () => {},
-    isPublished: () => {},
+    isPublished: false,
     updateDashboardTitle: () => {},
     editMode: false,
     setEditMode: () => {},
     showBuilderPane: () => {},
-    builderPaneType: BUILDER_PANE_TYPE.NONE,
     updateCss: () => {},
     hasUnsavedChanges: false,
     maxUndoHistoryExceeded: false,
@@ -79,6 +81,7 @@ describe('Header', () => {
   describe('read-only-user', () => {
     const overrideProps = {
       dashboardInfo: {
+        ...props.dashboardInfo,
         id: 1,
         dash_edit_perm: false,
         dash_save_perm: false,
@@ -88,32 +91,27 @@ describe('Header', () => {
 
     it('should render the EditableTitle', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(EditableTitle)).toHaveLength(1);
+      expect(wrapper.find(EditableTitle)).toExist();
     });
 
     it('should render the PublishedStatus', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(PublishedStatus)).toHaveLength(1);
+      expect(wrapper.find(PublishedStatus)).toExist();
     });
 
     it('should render the FaveStar', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(FaveStar)).toHaveLength(1);
+      expect(wrapper.find(FaveStar)).toExist();
     });
 
     it('should render the HeaderActionsDropdown', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(HeaderActionsDropdown)).toHaveLength(1);
-    });
-
-    it('should render one Button', () => {
-      const wrapper = setup(overrideProps);
-      expect(wrapper.find(Button)).toHaveLength(1);
+      expect(wrapper.find(HeaderActionsDropdown)).toExist();
     });
 
     it('should not set up undo/redo', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(UndoRedoKeylisteners)).toHaveLength(0);
+      expect(wrapper.find(UndoRedoKeylisteners)).not.toExist();
     });
   });
 
@@ -121,6 +119,7 @@ describe('Header', () => {
     const overrideProps = {
       editMode: false,
       dashboardInfo: {
+        ...props.dashboardInfo,
         id: 1,
         dash_edit_perm: true,
         dash_save_perm: true,
@@ -130,32 +129,27 @@ describe('Header', () => {
 
     it('should render the EditableTitle', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(EditableTitle)).toHaveLength(1);
+      expect(wrapper.find(EditableTitle)).toExist();
     });
 
     it('should render the PublishedStatus', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(PublishedStatus)).toHaveLength(1);
+      expect(wrapper.find(PublishedStatus)).toExist();
     });
 
     it('should render the FaveStar', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(FaveStar)).toHaveLength(1);
+      expect(wrapper.find(FaveStar)).toExist();
     });
 
     it('should render the HeaderActionsDropdown', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(HeaderActionsDropdown)).toHaveLength(1);
-    });
-
-    it('should render one Button', () => {
-      const wrapper = setup(overrideProps);
-      expect(wrapper.find(Button)).toHaveLength(1);
+      expect(wrapper.find(HeaderActionsDropdown)).toExist();
     });
 
     it('should not set up undo/redo', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(UndoRedoKeylisteners)).toHaveLength(0);
+      expect(wrapper.find(UndoRedoKeylisteners)).not.toExist();
     });
   });
 
@@ -163,6 +157,7 @@ describe('Header', () => {
     const overrideProps = {
       editMode: true,
       dashboardInfo: {
+        ...props.dashboardInfo,
         id: 1,
         dash_edit_perm: true,
         dash_save_perm: true,
@@ -172,38 +167,39 @@ describe('Header', () => {
 
     it('should render the EditableTitle', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(EditableTitle)).toHaveLength(1);
+      expect(wrapper.find(EditableTitle)).toExist();
     });
 
     it('should render the FaveStar', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(FaveStar)).toHaveLength(1);
+      expect(wrapper.find(FaveStar)).toExist();
     });
 
     it('should render the PublishedStatus', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(PublishedStatus)).toHaveLength(1);
+      expect(wrapper.find(PublishedStatus)).toExist();
     });
 
     it('should render the HeaderActionsDropdown', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(HeaderActionsDropdown)).toHaveLength(1);
+      expect(wrapper.find(HeaderActionsDropdown)).toExist();
     });
 
     it('should render five Buttons', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(Button)).toHaveLength(5);
+      expect(wrapper.find(Button)).toHaveLength(4);
     });
 
     it('should set up undo/redo', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(UndoRedoKeylisteners)).toHaveLength(1);
+      expect(wrapper.find(UndoRedoKeylisteners)).toExist();
     });
   });
 
   describe('logged-out-user', () => {
     const overrideProps = {
       dashboardInfo: {
+        ...props.dashboardInfo,
         id: 1,
         dash_edit_perm: false,
         dash_save_perm: false,
@@ -213,32 +209,27 @@ describe('Header', () => {
 
     it('should render the EditableTitle', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(EditableTitle)).toHaveLength(1);
+      expect(wrapper.find(EditableTitle)).toExist();
     });
 
     it('should render the PublishedStatus', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(PublishedStatus)).toHaveLength(1);
+      expect(wrapper.find(PublishedStatus)).toExist();
     });
 
     it('should not render the FaveStar', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(FaveStar)).toHaveLength(0);
+      expect(wrapper.find(FaveStar)).not.toExist();
     });
 
     it('should render the HeaderActionsDropdown', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(HeaderActionsDropdown)).toHaveLength(1);
-    });
-
-    it('should render one Button', () => {
-      const wrapper = setup(overrideProps);
-      expect(wrapper.find(Button)).toHaveLength(1);
+      expect(wrapper.find(HeaderActionsDropdown)).toExist();
     });
 
     it('should not set up undo/redo', () => {
       const wrapper = setup(overrideProps);
-      expect(wrapper.find(UndoRedoKeylisteners)).toHaveLength(0);
+      expect(wrapper.find(UndoRedoKeylisteners)).not.toExist();
     });
   });
 });

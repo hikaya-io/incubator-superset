@@ -16,13 +16,46 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { t } from '@superset-ui/translation';
+import { t, validateNonEmpty } from '@superset-ui/core';
+import { formatSelectOptions } from 'src/modules/utils';
 
 export default {
   controlPanelSections: [
     {
       label: t('Code'),
-      controlSetRows: [['markup_type'], ['code']],
+      controlSetRows: [
+        [
+          {
+            name: 'markup_type',
+            config: {
+              type: 'SelectControl',
+              label: t('Markup Type'),
+              clearable: false,
+              choices: formatSelectOptions(['markdown', 'html']),
+              default: 'markdown',
+              validators: [validateNonEmpty],
+              description: t('Pick your favorite markup language'),
+            },
+          },
+        ],
+        [
+          {
+            name: 'code',
+            config: {
+              type: 'TextAreaControl',
+              label: t('Code'),
+              description: t('Put your code here'),
+              mapStateToProps: state => ({
+                language:
+                  state.controls && state.controls.markup_type
+                    ? state.controls.markup_type.value
+                    : 'markdown',
+              }),
+              default: '',
+            },
+          },
+        ],
+      ],
     },
   ],
   controlOverrides: {

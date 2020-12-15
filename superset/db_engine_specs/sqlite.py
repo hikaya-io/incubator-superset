@@ -24,13 +24,14 @@ from superset.utils import core as utils
 
 if TYPE_CHECKING:
     # prevent circular imports
-    from superset.models.core import Database  # pylint: disable=unused-import
+    from superset.models.core import Database
 
 
 class SqliteEngineSpec(BaseEngineSpec):
     engine = "sqlite"
+    engine_name = "SQLite"
 
-    _time_grain_functions = {
+    _time_grain_expressions = {
         None: "{col}",
         "PT1S": "DATETIME(STRFTIME('%Y-%m-%dT%H:%M:%S', {col}))",
         "PT1M": "DATETIME(STRFTIME('%Y-%m-%dT%H:%M:00', {col}))",
@@ -64,19 +65,19 @@ class SqliteEngineSpec(BaseEngineSpec):
                 cache=database.table_cache_enabled,
                 cache_timeout=database.table_cache_timeout,
             )
-        elif datasource_type == "view":
+        if datasource_type == "view":
             return database.get_all_view_names_in_schema(
                 schema=schema,
                 force=True,
                 cache=database.table_cache_enabled,
                 cache_timeout=database.table_cache_timeout,
             )
-        else:
-            raise Exception(f"Unsupported datasource_type: {datasource_type}")
+        raise Exception(f"Unsupported datasource_type: {datasource_type}")
 
     @classmethod
     def convert_dttm(cls, target_type: str, dttm: datetime) -> Optional[str]:
-        if target_type.upper() == "TEXT":
+        tt = target_type.upper()
+        if tt == utils.TemporalType.TEXT:
             return f"""'{dttm.isoformat(sep=" ", timespec="microseconds")}'"""
         return None
 

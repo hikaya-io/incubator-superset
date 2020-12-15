@@ -19,19 +19,18 @@
 /* eslint-disable camelcase */
 import { isString } from 'lodash';
 import shortid from 'shortid';
-import { CategoricalColorNamespace } from '@superset-ui/color';
+import { CategoricalColorNamespace } from '@superset-ui/core';
 
-import { chart } from '../../chart/chartReducer';
+import { initSliceEntities } from 'src/dashboard/reducers/sliceEntities';
+import { getParam } from 'src/modules/utils';
+import { applyDefaultFormData } from 'src/explore/store';
+import { buildActiveFilters } from 'src/dashboard/util/activeDashboardFilters';
 import {
   DASHBOARD_FILTER_SCOPE_GLOBAL,
   dashboardFilter,
 } from './dashboardFilters';
-import { initSliceEntities } from './sliceEntities';
-import { getParam } from '../../modules/utils';
-import { applyDefaultFormData } from '../../explore/store';
-import { buildActiveFilters } from '../util/activeDashboardFilters';
+import { chart } from '../../chart/chartReducer';
 import {
-  BUILDER_PANE_TYPE,
   DASHBOARD_HEADER_ID,
   GRID_DEFAULT_CHART_WIDTH,
   GRID_COLUMN_COUNT,
@@ -41,7 +40,6 @@ import {
   CHART_TYPE,
   ROW_TYPE,
 } from '../util/componentTypes';
-import { buildFilterColorMap } from '../util/dashboardFiltersColorMap';
 import findFirstParentContainerId from '../util/findFirstParentContainer';
 import getEmptyLayout from '../util/getEmptyLayout';
 import getFilterConfigsFromFormdata from '../util/getFilterConfigsFromFormdata';
@@ -49,7 +47,7 @@ import getLocationHash from '../util/getLocationHash';
 import newComponentFactory from '../util/newComponentFactory';
 import { TIME_RANGE } from '../../visualizations/FilterBox/FilterBox';
 
-export default function(bootstrapData) {
+export default function getInitialState(bootstrapData) {
   const { user_id, datasources, common, editMode, urlParams } = bootstrapData;
 
   const dashboard = { ...bootstrapData.dashboard_data };
@@ -109,117 +107,116 @@ export default function(bootstrapData) {
   const sliceIds = new Set();
   dashboard.slices.forEach(slice => {
     const key = slice.slice_id;
-    if (['separator', 'markup'].indexOf(slice.form_data.viz_type) === -1) {
-      const form_data = {
-        ...slice.form_data,
-        url_params: {
-          ...slice.form_data.url_params,
-          ...urlParams,
-        },
-      };
-      chartQueries[key] = {
-        ...chart,
-        id: key,
-        form_data,
-        formData: applyDefaultFormData(form_data),
-      };
+    const form_data = {
+      ...slice.form_data,
+      url_params: {
+        ...slice.form_data.url_params,
+        ...urlParams,
+      },
+    };
+    chartQueries[key] = {
+      ...chart,
+      id: key,
+      form_data,
+      formData: applyDefaultFormData(form_data),
+    };
 
-      slices[key] = {
-        slice_id: key,
-        slice_url: slice.slice_url,
-        slice_name: slice.slice_name,
-        form_data: slice.form_data,
-        edit_url: slice.edit_url,
-        viz_type: slice.form_data.viz_type,
-        datasource: slice.form_data.datasource,
-        description: slice.description,
-        description_markeddown: slice.description_markeddown,
-        modified: slice.modified,
-        changed_on: new Date(slice.changed_on).getTime(),
-      };
+    slices[key] = {
+      slice_id: key,
+      slice_url: slice.slice_url,
+      slice_name: slice.slice_name,
+      form_data: slice.form_data,
+      edit_url: slice.edit_url,
+      viz_type: slice.form_data.viz_type,
+      datasource: slice.form_data.datasource,
+      description: slice.description,
+      description_markeddown: slice.description_markeddown,
+      owners: slice.owners,
+      modified: slice.modified,
+      changed_on: new Date(slice.changed_on).getTime(),
+    };
 
-      sliceIds.add(key);
+    sliceIds.add(key);
 
-      // if there are newly added slices from explore view, fill slices into 1 or more rows
-      if (!chartIdToLayoutId[key] && layout[parentId]) {
-        if (
-          newSlicesContainerWidth === 0 ||
-          newSlicesContainerWidth + GRID_DEFAULT_CHART_WIDTH > GRID_COLUMN_COUNT
-        ) {
-          newSlicesContainer = newComponentFactory(
-            ROW_TYPE,
-            (parent.parents || []).slice(),
-          );
-          layout[newSlicesContainer.id] = newSlicesContainer;
-          parent.children.push(newSlicesContainer.id);
-          newSlicesContainerWidth = 0;
-        }
-
-        const chartHolder = newComponentFactory(
-          CHART_TYPE,
-          {
-            chartId: slice.slice_id,
-          },
-          (newSlicesContainer.parents || []).slice(),
+    // if there are newly added slices from explore view, fill slices into 1 or more rows
+    if (!chartIdToLayoutId[key] && layout[parentId]) {
+      if (
+        newSlicesContainerWidth === 0 ||
+        newSlicesContainerWidth + GRID_DEFAULT_CHART_WIDTH > GRID_COLUMN_COUNT
+      ) {
+        newSlicesContainer = newComponentFactory(
+          ROW_TYPE,
+          (parent.parents || []).slice(),
         );
-
-        layout[chartHolder.id] = chartHolder;
-        newSlicesContainer.children.push(chartHolder.id);
-        chartIdToLayoutId[chartHolder.meta.chartId] = chartHolder.id;
-        newSlicesContainerWidth += GRID_DEFAULT_CHART_WIDTH;
+        layout[newSlicesContainer.id] = newSlicesContainer;
+        parent.children.push(newSlicesContainer.id);
+        newSlicesContainerWidth = 0;
       }
 
-      // build DashboardFilters for interactive filter features
-      if (slice.form_data.viz_type === 'filter_box') {
-        const configs = getFilterConfigsFromFormdata(slice.form_data);
-        let columns = configs.columns;
-        const labels = configs.labels;
-        if (preselectFilters[key]) {
-          Object.keys(columns).forEach(col => {
-            if (preselectFilters[key][col]) {
-              columns = {
-                ...columns,
-                [col]: preselectFilters[key][col],
-              };
-            }
-          });
-        }
+      const chartHolder = newComponentFactory(
+        CHART_TYPE,
+        {
+          chartId: slice.slice_id,
+        },
+        (newSlicesContainer.parents || []).slice(),
+      );
 
-        const scopesByChartId = Object.keys(columns).reduce((map, column) => {
-          const scopeSettings = {
-            ...filterScopes[key],
-          };
-          const { scope, immune } = {
-            ...DASHBOARD_FILTER_SCOPE_GLOBAL,
-            ...scopeSettings[column],
-          };
+      layout[chartHolder.id] = chartHolder;
+      newSlicesContainer.children.push(chartHolder.id);
+      chartIdToLayoutId[chartHolder.meta.chartId] = chartHolder.id;
+      newSlicesContainerWidth += GRID_DEFAULT_CHART_WIDTH;
+    }
 
-          return {
-            ...map,
-            [column]: {
-              scope,
-              immune,
-            },
-          };
-        }, {});
+    // build DashboardFilters for interactive filter features
+    if (slice.form_data.viz_type === 'filter_box') {
+      const configs = getFilterConfigsFromFormdata(slice.form_data);
+      let { columns } = configs;
+      const { labels } = configs;
+      if (preselectFilters[key]) {
+        Object.keys(columns).forEach(col => {
+          if (preselectFilters[key][col]) {
+            columns = {
+              ...columns,
+              [col]: preselectFilters[key][col],
+            };
+          }
+        });
+      }
 
-        const componentId = chartIdToLayoutId[key];
-        const directPathToFilter = (layout[componentId].parents || []).slice();
-        directPathToFilter.push(componentId);
-        dashboardFilters[key] = {
-          ...dashboardFilter,
-          chartId: key,
-          componentId,
-          datasourceId: slice.form_data.datasource,
-          filterName: slice.slice_name,
-          directPathToFilter,
-          columns,
-          labels,
-          scopes: scopesByChartId,
-          isInstantFilter: !!slice.form_data.instant_filtering,
-          isDateFilter: Object.keys(columns).includes(TIME_RANGE),
+      const scopesByChartId = Object.keys(columns).reduce((map, column) => {
+        const scopeSettings = {
+          ...filterScopes[key],
         };
-      }
+        const { scope, immune } = {
+          ...DASHBOARD_FILTER_SCOPE_GLOBAL,
+          ...scopeSettings[column],
+        };
+
+        return {
+          ...map,
+          [column]: {
+            scope,
+            immune,
+          },
+        };
+      }, {});
+
+      const componentId = chartIdToLayoutId[key];
+      const directPathToFilter = (layout[componentId].parents || []).slice();
+      directPathToFilter.push(componentId);
+      dashboardFilters[key] = {
+        ...dashboardFilter,
+        chartId: key,
+        componentId,
+        datasourceId: slice.form_data.datasource,
+        filterName: slice.slice_name,
+        directPathToFilter,
+        columns,
+        labels,
+        scopes: scopesByChartId,
+        isInstantFilter: !!slice.form_data.instant_filtering,
+        isDateFilter: Object.keys(columns).includes(TIME_RANGE),
+      };
     }
 
     // sync layout names with current slice names in case a slice was edited
@@ -234,7 +231,6 @@ export default function(bootstrapData) {
     dashboardFilters,
     components: layout,
   });
-  buildFilterColorMap(dashboardFilters, layout);
 
   // store the header as a layout component so we can undo/redo changes
   layout[DASHBOARD_HEADER_ID] = {
@@ -278,31 +274,27 @@ export default function(bootstrapData) {
         flash_messages: common.flash_messages,
         conf: common.conf,
       },
+      lastModifiedTime: dashboard.last_modified_time,
     },
     dashboardFilters,
     dashboardState: {
       sliceIds: Array.from(sliceIds),
       directPathToChild,
       directPathLastUpdated: Date.now(),
-      // dashboard only has 1 focused filter field at a time,
-      // but when user switch different filter boxes,
-      // browser didn't always fire onBlur and onFocus events in order.
-      // so in redux state focusedFilterField prop is a queue,
-      // but component use focusedFilterField prop as single object.
-      focusedFilterField: [],
+      focusedFilterField: null,
       expandedSlices: dashboard.metadata.expanded_slices || {},
       refreshFrequency: dashboard.metadata.refresh_frequency || 0,
+      // dashboard viewers can set refresh frequency for the current visit,
+      // only persistent refreshFrequency will be saved to backend
+      shouldPersistRefreshFrequency: false,
       css: dashboard.css || '',
       colorNamespace: dashboard.metadata.color_namespace,
       colorScheme: dashboard.metadata.color_scheme,
       editMode: dashboard.dash_edit_perm && editMode,
       isPublished: dashboard.published,
-      builderPaneType:
-        dashboard.dash_edit_perm && editMode
-          ? BUILDER_PANE_TYPE.ADD_COMPONENTS
-          : BUILDER_PANE_TYPE.NONE,
       hasUnsavedChanges: false,
       maxUndoHistoryExceeded: false,
+      lastModifiedTime: dashboard.last_modified_time,
     },
     dashboardLayout,
     messageToasts: [],

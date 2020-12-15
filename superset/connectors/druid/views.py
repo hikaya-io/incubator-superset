@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-# pylint: disable=C,R,W
+# pylint: disable=too-many-ancestors
 import json
 import logging
 from datetime import datetime
@@ -24,13 +24,16 @@ from flask_appbuilder import CompactCRUDMixin, expose
 from flask_appbuilder.fieldwidgets import Select2Widget
 from flask_appbuilder.models.sqla.interface import SQLAInterface
 from flask_appbuilder.security.decorators import has_access
-from flask_babel import gettext as __, lazy_gettext as _
+from flask_babel import lazy_gettext as _
+from wtforms import StringField
 from wtforms.ext.sqlalchemy.fields import QuerySelectField
 
-from superset import app, appbuilder, db, security_manager
-from superset.connectors.base.views import DatasourceModelView
+from superset import db, security_manager
+from superset.connectors.base.views import BS3TextFieldROWidget, DatasourceModelView
 from superset.connectors.connector_registry import ConnectorRegistry
+from superset.connectors.druid import models
 from superset.constants import RouteMethod
+from superset.typing import FlaskResponse
 from superset.utils import core as utils
 from superset.views.base import (
     BaseSupersetView,
@@ -42,8 +45,6 @@ from superset.views.base import (
     validate_json,
     YamlExportMixin,
 )
-
-from . import models
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ class DruidColumnInlineView(CompactCRUDMixin, SupersetModelView):
     add_form_extra_fields = {
         "datasource": QuerySelectField(
             "Datasource",
-            query_factory=lambda: db.session().query(models.DruidDatasource),
+            query_factory=lambda: db.session.query(models.DruidDatasource),
             allow_blank=True,
             widget=Select2Widget(extra_classes="readonly"),
         )
@@ -106,14 +107,14 @@ class DruidColumnInlineView(CompactCRUDMixin, SupersetModelView):
 
     edit_form_extra_fields = add_form_extra_fields
 
-    def pre_update(self, col):
+    def pre_update(self, item: "DruidColumnInlineView") -> None:
         # If a dimension spec JSON is given, ensure that it is
         # valid JSON and that `outputName` is specified
-        if col.dimension_spec_json:
+        if item.dimension_spec_json:
             try:
-                dimension_spec = json.loads(col.dimension_spec_json)
-            except ValueError as e:
-                raise ValueError("Invalid Dimension Spec JSON: " + str(e))
+                dimension_spec = json.loads(item.dimension_spec_json)
+            except ValueError as ex:
+                raise ValueError("Invalid Dimension Spec JSON: " + str(ex))
             if not isinstance(dimension_spec, dict):
                 raise ValueError("Dimension Spec must be a JSON object")
             if "outputName" not in dimension_spec:
@@ -121,18 +122,18 @@ class DruidColumnInlineView(CompactCRUDMixin, SupersetModelView):
             if "dimension" not in dimension_spec:
                 raise ValueError("Dimension Spec is missing `dimension`")
             # `outputName` should be the same as the `column_name`
-            if dimension_spec["outputName"] != col.column_name:
+            if dimension_spec["outputName"] != item.column_name:
                 raise ValueError(
                     "`outputName` [{}] unequal to `column_name` [{}]".format(
-                        dimension_spec["outputName"], col.column_name
+                        dimension_spec["outputName"], item.column_name
                     )
                 )
 
-    def post_update(self, col):
-        col.refresh_metrics()
+    def post_update(self, item: "DruidColumnInlineView") -> None:
+        item.refresh_metrics()
 
-    def post_add(self, col):
-        self.post_update(col)
+    def post_add(self, item: "DruidColumnInlineView") -> None:
+        self.post_update(item)
 
 
 class DruidMetricInlineView(CompactCRUDMixin, SupersetModelView):
@@ -179,7 +180,7 @@ class DruidMetricInlineView(CompactCRUDMixin, SupersetModelView):
     add_form_extra_fields = {
         "datasource": QuerySelectField(
             "Datasource",
-            query_factory=lambda: db.session().query(models.DruidDatasource),
+            query_factory=lambda: db.session.query(models.DruidDatasource),
             allow_blank=True,
             widget=Select2Widget(extra_classes="readonly"),
         )
@@ -240,13 +241,13 @@ class DruidClusterModelView(SupersetModelView, DeleteMixin, YamlExportMixin):
 
     yaml_dict_key = "databases"
 
-    def pre_add(self, cluster):
-        security_manager.add_permission_view_menu("database_access", cluster.perm)
+    def pre_add(self, item: "DruidClusterModelView") -> None:
+        security_manager.add_permission_view_menu("database_access", item.perm)
 
-    def pre_update(self, cluster):
-        self.pre_add(cluster)
+    def pre_update(self, item: "DruidClusterModelView") -> None:
+        self.pre_add(item)
 
-    def _delete(self, pk):
+    def _delete(self, pk: int) -> None:
         DeleteMixin._delete(self, pk)
 
 
@@ -333,30 +334,36 @@ class DruidDatasourceModelView(DatasourceModelView, DeleteMixin, YamlExportMixin
         "changed_by_": _("Changed By"),
         "modified": _("Modified"),
     }
+    edit_form_extra_fields = {
+        "cluster": QuerySelectField(
+            "Cluster",
+            query_factory=lambda: db.session.query(models.DruidCluster),
+            widget=Select2Widget(extra_classes="readonly"),
+        ),
+        "datasource_name": StringField(
+            "Datasource Name", widget=BS3TextFieldROWidget()
+        ),
+    }
 
-    def pre_add(self, datasource):
+    def pre_add(self, item: "DruidDatasourceModelView") -> None:
         with db.session.no_autoflush:
             query = db.session.query(models.DruidDatasource).filter(
-                models.DruidDatasource.datasource_name == datasource.datasource_name,
-                models.DruidDatasource.cluster_id == datasource.cluster_id,
+                models.DruidDatasource.datasource_name == item.datasource_name,
+                models.DruidDatasource.cluster_id == item.cluster_id,
             )
             if db.session.query(query.exists()).scalar():
-                raise Exception(get_datasource_exist_error_msg(datasource.full_name))
+                raise Exception(get_datasource_exist_error_msg(item.full_name))
 
-    def post_add(self, datasource):
-        datasource.refresh_metrics()
-        security_manager.add_permission_view_menu(
-            "datasource_access", datasource.get_perm()
-        )
-        if datasource.schema:
-            security_manager.add_permission_view_menu(
-                "schema_access", datasource.schema_perm
-            )
+    def post_add(self, item: "DruidDatasourceModelView") -> None:
+        item.refresh_metrics()
+        security_manager.add_permission_view_menu("datasource_access", item.get_perm())
+        if item.schema:
+            security_manager.add_permission_view_menu("schema_access", item.schema_perm)
 
-    def post_update(self, datasource):
-        self.post_add(datasource)
+    def post_update(self, item: "DruidDatasourceModelView") -> None:
+        self.post_add(item)
 
-    def _delete(self, pk):
+    def _delete(self, pk: int) -> None:
         DeleteMixin._delete(self, pk)
 
 
@@ -365,25 +372,28 @@ class Druid(BaseSupersetView):
 
     @has_access
     @expose("/refresh_datasources/")
-    def refresh_datasources(self, refresh_all=True):
+    def refresh_datasources(  # pylint: disable=no-self-use
+        self, refresh_all: bool = True
+    ) -> FlaskResponse:
         """endpoint that refreshes druid datasources metadata"""
         session = db.session()
-        DruidCluster = ConnectorRegistry.sources["druid"].cluster_class
+        DruidCluster = ConnectorRegistry.sources[  # pylint: disable=invalid-name
+            "druid"
+        ].cluster_class
         for cluster in session.query(DruidCluster).all():
             cluster_name = cluster.cluster_name
             valid_cluster = True
             try:
                 cluster.refresh_datasources(refresh_all=refresh_all)
-            except Exception as e:
+            except Exception as ex:  # pylint: disable=broad-except
                 valid_cluster = False
                 flash(
                     "Error while processing cluster '{}'\n{}".format(
-                        cluster_name, utils.error_msg_from_exception(e)
+                        cluster_name, utils.error_msg_from_exception(ex)
                     ),
                     "danger",
                 )
-                logger.exception(e)
-                pass
+                logger.exception(ex)
             if valid_cluster:
                 cluster.metadata_last_refreshed = datetime.now()
                 flash(
@@ -397,7 +407,7 @@ class Druid(BaseSupersetView):
 
     @has_access
     @expose("/scan_new_datasources/")
-    def scan_new_datasources(self):
+    def scan_new_datasources(self) -> FlaskResponse:
         """
         Calling this endpoint will cause a scan for new
         datasources only and add them.

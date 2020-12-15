@@ -19,23 +19,32 @@ import unittest
 import uuid
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+import hashlib
+import json
+import os
+import re
 from unittest.mock import Mock, patch
 
 import numpy
-from flask import Flask
-from flask_caching import Cache
+from flask import Flask, g
+import marshmallow
 from sqlalchemy.exc import ArgumentError
 
 import tests.test_app
 from superset import app, db, security_manager
-from superset.exceptions import SupersetException
-from superset.models.core import Database
-from superset.utils.cache_manager import CacheManager
+from superset.exceptions import CertificateException, SupersetException
+from superset.models.core import Database, Log
+from superset.models.dashboard import Dashboard
+from superset.models.slice import Slice
 from superset.utils.core import (
     base_json_conv,
+    cast_to_num,
     convert_legacy_filters_into_adhoc,
-    datetime_f,
+    create_ssl_cert_file,
     format_timedelta,
+    get_form_data_token,
+    get_iterable,
+    get_email_address_list,
     get_or_create_db,
     get_since_until,
     get_stacktrace,
@@ -45,6 +54,7 @@ from superset.utils.core import (
     memoized,
     merge_extra_filters,
     merge_request_params,
+    parse_ssl_cert,
     parse_human_timedelta,
     parse_js_uri_path_item,
     parse_past_timedelta,
@@ -54,8 +64,15 @@ from superset.utils.core import (
     zlib_compress,
     zlib_decompress,
 )
-from superset.views.utils import get_time_range_endpoints
+from superset.utils import schema
+from superset.views.utils import (
+    build_extra_filters,
+    get_form_data,
+    get_time_range_endpoints,
+)
 from tests.base_tests import SupersetTestCase
+
+from .fixtures.certificates import ssl_certificate
 
 
 def mock_parse_human_datetime(s):
@@ -96,7 +113,7 @@ def mock_to_adhoc(filt, expressionType="SIMPLE", clause="where"):
     return result
 
 
-class UtilsTestCase(SupersetTestCase):
+class TestUtils(SupersetTestCase):
     def test_json_int_dttm_ser(self):
         dttm = datetime(2020, 1, 1)
         ts = 1577836800000.0
@@ -157,12 +174,18 @@ class UtilsTestCase(SupersetTestCase):
     def test_merge_extra_filters(self):
         # does nothing if no extra filters
         form_data = {"A": 1, "B": 2, "c": "test"}
-        expected = {"A": 1, "B": 2, "c": "test"}
+        expected = {**form_data, "applied_time_extras": {}}
         merge_extra_filters(form_data)
         self.assertEqual(form_data, expected)
         # empty extra_filters
         form_data = {"A": 1, "B": 2, "c": "test", "extra_filters": []}
-        expected = {"A": 1, "B": 2, "c": "test", "adhoc_filters": []}
+        expected = {
+            "A": 1,
+            "B": 2,
+            "c": "test",
+            "adhoc_filters": [],
+            "applied_time_extras": {},
+        }
         merge_extra_filters(form_data)
         self.assertEqual(form_data, expected)
         # copy over extra filters into empty filters
@@ -188,7 +211,8 @@ class UtilsTestCase(SupersetTestCase):
                     "operator": "==",
                     "subject": "B",
                 },
-            ]
+            ],
+            "applied_time_extras": {},
         }
         merge_extra_filters(form_data)
         self.assertEqual(form_data, expected)
@@ -231,7 +255,8 @@ class UtilsTestCase(SupersetTestCase):
                     "operator": "==",
                     "subject": "B",
                 },
-            ]
+            ],
+            "applied_time_extras": {},
         }
         merge_extra_filters(form_data)
         self.assertEqual(form_data, expected)
@@ -261,6 +286,13 @@ class UtilsTestCase(SupersetTestCase):
             "time_grain_sqla": "years",
             "granularity": "90 seconds",
             "druid_time_origin": "now",
+            "applied_time_extras": {
+                "__time_range": "1 year ago :",
+                "__time_col": "birth_year",
+                "__time_grain": "years",
+                "__time_origin": "now",
+                "__granularity": "90 seconds",
+            },
         }
         merge_extra_filters(form_data)
         self.assertEqual(form_data, expected)
@@ -273,7 +305,7 @@ class UtilsTestCase(SupersetTestCase):
                 {"col": "B", "op": "==", "val": []},
             ]
         }
-        expected = {"adhoc_filters": []}
+        expected = {"adhoc_filters": [], "applied_time_extras": {}}
         merge_extra_filters(form_data)
         self.assertEqual(form_data, expected)
 
@@ -300,7 +332,8 @@ class UtilsTestCase(SupersetTestCase):
                     "operator": "in",
                     "subject": None,
                 }
-            ]
+            ],
+            "applied_time_extras": {},
         }
         merge_extra_filters(form_data)
         self.assertEqual(form_data, expected)
@@ -360,7 +393,8 @@ class UtilsTestCase(SupersetTestCase):
                     "operator": "in",
                     "subject": "c",
                 },
-            ]
+            ],
+            "applied_time_extras": {},
         }
         merge_extra_filters(form_data)
         self.assertEqual(form_data, expected)
@@ -412,7 +446,8 @@ class UtilsTestCase(SupersetTestCase):
                     "operator": "in",
                     "subject": "a",
                 },
-            ]
+            ],
+            "applied_time_extras": {},
         }
         merge_extra_filters(form_data)
         self.assertEqual(form_data, expected)
@@ -461,7 +496,8 @@ class UtilsTestCase(SupersetTestCase):
                     "operator": "in",
                     "subject": "a",
                 },
-            ]
+            ],
+            "applied_time_extras": {},
         }
         merge_extra_filters(form_data)
         self.assertEqual(form_data, expected)
@@ -520,7 +556,8 @@ class UtilsTestCase(SupersetTestCase):
                     "operator": "==",
                     "subject": "B",
                 },
-            ]
+            ],
+            "applied_time_extras": {},
         }
         merge_extra_filters(form_data)
         self.assertEqual(form_data, expected)
@@ -543,20 +580,9 @@ class UtilsTestCase(SupersetTestCase):
         merge_request_params(form_data, url_params)
         self.assertIn("url_params", form_data.keys())
         self.assertIn("abc", form_data["url_params"])
-        self.assertEquals(
+        self.assertEqual(
             url_params["dashboard_ids"], form_data["url_params"]["dashboard_ids"]
         )
-
-    def test_datetime_f(self):
-        self.assertEqual(
-            datetime_f(datetime(1990, 9, 21, 19, 11, 19, 626096)),
-            "<nobr>1990-09-21T19:11:19.626096</nobr>",
-        )
-        self.assertEqual(len(datetime_f(datetime.now())), 28)
-        self.assertEqual(datetime_f(None), "<nobr>None</nobr>")
-        iso = datetime.now().isoformat()[:10].split("-")
-        [a, b, c] = [int(v) for v in iso]
-        self.assertEqual(datetime_f(datetime(a, b, c)), "<nobr>00:00:00</nobr>")
 
     def test_format_timedelta(self):
         self.assertEqual(format_timedelta(timedelta(0)), "0:00:00")
@@ -581,6 +607,8 @@ class UtilsTestCase(SupersetTestCase):
         self.assertEqual(jsonObj.process_result_value(val, "dialect"), obj)
 
     def test_validate_json(self):
+        valid = '{"a": 5, "b": [1, 5, ["g", "h"]]}'
+        self.assertIsNone(validate_json(valid))
         invalid = '{"a": 5, "b": [1, 5, ["g", "h]]}'
         with self.assertRaises(SupersetException):
             validate_json(invalid)
@@ -824,32 +852,6 @@ class UtilsTestCase(SupersetTestCase):
         self.assertIsNone(parse_js_uri_path_item(None))
         self.assertIsNotNone(parse_js_uri_path_item("item"))
 
-    def test_setup_cache_null_config(self):
-        app = Flask(__name__)
-        cache_config = {"CACHE_TYPE": "null"}
-        assert isinstance(CacheManager._setup_cache(app, cache_config), Cache)
-
-    def test_setup_cache_standard_config(self):
-        app = Flask(__name__)
-        cache_config = {
-            "CACHE_TYPE": "redis",
-            "CACHE_DEFAULT_TIMEOUT": 60,
-            "CACHE_KEY_PREFIX": "superset_results",
-            "CACHE_REDIS_URL": "redis://localhost:6379/0",
-        }
-        assert isinstance(CacheManager._setup_cache(app, cache_config), Cache) is True
-
-    def test_setup_cache_custom_function(self):
-        app = Flask(__name__)
-        CustomCache = type("CustomCache", (object,), {"__init__": lambda *args: None})
-
-        def init_cache(app):
-            return CustomCache(app, {})
-
-        assert (
-            isinstance(CacheManager._setup_cache(app, init_cache), CustomCache) is True
-        )
-
     def test_get_stacktrace(self):
         with app.app_context():
             app.config["SHOW_STACKTRACE"] = True
@@ -950,3 +952,205 @@ class UtilsTestCase(SupersetTestCase):
                 get_time_range_endpoints(form_data={"datasource": "1__table"}, slc=slc),
                 (TimeRangeEndpoint.INCLUSIVE, TimeRangeEndpoint.EXCLUSIVE),
             )
+
+    def test_get_iterable(self):
+        self.assertListEqual(get_iterable(123), [123])
+        self.assertListEqual(get_iterable([123]), [123])
+        self.assertListEqual(get_iterable("foo"), ["foo"])
+
+    def test_build_extra_filters(self):
+        world_health = db.session.query(Dashboard).filter_by(slug="world_health").one()
+        layout = json.loads(world_health.position_json)
+        filter_ = db.session.query(Slice).filter_by(slice_name="Region Filter").one()
+        world = db.session.query(Slice).filter_by(slice_name="World's Population").one()
+        box_plot = db.session.query(Slice).filter_by(slice_name="Box plot").one()
+        treemap = db.session.query(Slice).filter_by(slice_name="Treemap").one()
+
+        filter_scopes = {
+            str(filter_.id): {
+                "region": {"scope": ["ROOT_ID"], "immune": [treemap.id]},
+                "country_name": {
+                    "scope": ["ROOT_ID"],
+                    "immune": [treemap.id, box_plot.id],
+                },
+            }
+        }
+
+        default_filters = {
+            str(filter_.id): {
+                "region": ["North America"],
+                "country_name": ["United States"],
+            }
+        }
+
+        # immune to all filters
+        assert (
+            build_extra_filters(layout, filter_scopes, default_filters, treemap.id)
+            == []
+        )
+
+        # in scope
+        assert build_extra_filters(
+            layout, filter_scopes, default_filters, world.id
+        ) == [
+            {"col": "region", "op": "==", "val": "North America"},
+            {"col": "country_name", "op": "in", "val": ["United States"]},
+        ]
+
+        assert build_extra_filters(
+            layout, filter_scopes, default_filters, box_plot.id
+        ) == [{"col": "region", "op": "==", "val": "North America"}]
+
+    def test_ssl_certificate_parse(self):
+        parsed_certificate = parse_ssl_cert(ssl_certificate)
+        self.assertEqual(parsed_certificate.serial_number, 12355228710836649848)
+        self.assertRaises(CertificateException, parse_ssl_cert, "abc" + ssl_certificate)
+
+    def test_ssl_certificate_file_creation(self):
+        path = create_ssl_cert_file(ssl_certificate)
+        expected_filename = hashlib.md5(ssl_certificate.encode("utf-8")).hexdigest()
+        self.assertIn(expected_filename, path)
+        self.assertTrue(os.path.exists(path))
+
+    def test_get_email_address_list(self):
+        self.assertEqual(get_email_address_list("a@a"), ["a@a"])
+        self.assertEqual(get_email_address_list(" a@a "), ["a@a"])
+        self.assertEqual(get_email_address_list("a@a\n"), ["a@a"])
+        self.assertEqual(get_email_address_list(",a@a;"), ["a@a"])
+        self.assertEqual(
+            get_email_address_list(",a@a; b@b c@c a-c@c; d@d, f@f"),
+            ["a@a", "b@b", "c@c", "a-c@c", "d@d", "f@f"],
+        )
+
+    def test_get_form_data_default(self) -> None:
+        with app.test_request_context():
+            form_data, slc = get_form_data()
+
+            self.assertEqual(
+                form_data,
+                {"time_range_endpoints": get_time_range_endpoints(form_data={}),},
+            )
+
+            self.assertEqual(slc, None)
+
+    def test_get_form_data_request_args(self) -> None:
+        with app.test_request_context(
+            query_string={"form_data": json.dumps({"foo": "bar"})}
+        ):
+            form_data, slc = get_form_data()
+
+            self.assertEqual(
+                form_data,
+                {
+                    "foo": "bar",
+                    "time_range_endpoints": get_time_range_endpoints(form_data={}),
+                },
+            )
+
+            self.assertEqual(slc, None)
+
+    def test_get_form_data_request_form(self) -> None:
+        with app.test_request_context(data={"form_data": json.dumps({"foo": "bar"})}):
+            form_data, slc = get_form_data()
+
+            self.assertEqual(
+                form_data,
+                {
+                    "foo": "bar",
+                    "time_range_endpoints": get_time_range_endpoints(form_data={}),
+                },
+            )
+
+            self.assertEqual(slc, None)
+
+    def test_get_form_data_request_args_and_form(self) -> None:
+        with app.test_request_context(
+            data={"form_data": json.dumps({"foo": "bar"})},
+            query_string={"form_data": json.dumps({"baz": "bar"})},
+        ):
+            form_data, slc = get_form_data()
+
+            self.assertEqual(
+                form_data,
+                {
+                    "baz": "bar",
+                    "foo": "bar",
+                    "time_range_endpoints": get_time_range_endpoints(form_data={}),
+                },
+            )
+
+            self.assertEqual(slc, None)
+
+    def test_get_form_data_globals(self) -> None:
+        with app.test_request_context():
+            g.form_data = {"foo": "bar"}
+            form_data, slc = get_form_data()
+            delattr(g, "form_data")
+
+            self.assertEqual(
+                form_data,
+                {
+                    "foo": "bar",
+                    "time_range_endpoints": get_time_range_endpoints(form_data={}),
+                },
+            )
+
+            self.assertEqual(slc, None)
+
+    def test_log_this(self) -> None:
+        # TODO: Add additional scenarios.
+        self.login(username="admin")
+        slc = self.get_slice("Girls", db.session)
+        dashboard_id = 1
+
+        resp = self.get_json_resp(
+            f"/superset/explore_json/{slc.datasource_type}/{slc.datasource_id}/"
+            + f'?form_data={{"slice_id": {slc.id}}}&dashboard_id={dashboard_id}',
+            {"form_data": json.dumps(slc.viz.form_data)},
+        )
+
+        record = (
+            db.session.query(Log)
+            .filter_by(action="explore_json", slice_id=slc.id)
+            .order_by(Log.dttm.desc())
+            .first()
+        )
+
+        self.assertEqual(record.dashboard_id, dashboard_id)
+        self.assertEqual(json.loads(record.json)["dashboard_id"], str(dashboard_id))
+        self.assertEqual(json.loads(record.json)["form_data"]["slice_id"], slc.id)
+
+        self.assertEqual(
+            json.loads(record.json)["form_data"]["viz_type"],
+            slc.viz.form_data["viz_type"],
+        )
+
+    def test_schema_validate_json(self):
+        valid = '{"a": 5, "b": [1, 5, ["g", "h"]]}'
+        self.assertIsNone(schema.validate_json(valid))
+        invalid = '{"a": 5, "b": [1, 5, ["g", "h]]}'
+        self.assertRaises(marshmallow.ValidationError, schema.validate_json, invalid)
+
+    def test_schema_one_of_case_insensitive(self):
+        validator = schema.OneOfCaseInsensitive(choices=[1, 2, 3, "FoO", "BAR", "baz"])
+        self.assertEqual(1, validator(1))
+        self.assertEqual(2, validator(2))
+        self.assertEqual("FoO", validator("FoO"))
+        self.assertEqual("FOO", validator("FOO"))
+        self.assertEqual("bar", validator("bar"))
+        self.assertEqual("BaZ", validator("BaZ"))
+        self.assertRaises(marshmallow.ValidationError, validator, "qwerty")
+        self.assertRaises(marshmallow.ValidationError, validator, 4)
+
+    def test_cast_to_num(self) -> None:
+        assert cast_to_num("5") == 5
+        assert cast_to_num("5.2") == 5.2
+        assert cast_to_num(10) == 10
+        assert cast_to_num(10.1) == 10.1
+        assert cast_to_num(None) is None
+        assert cast_to_num("this is not a string") is None
+
+    def test_get_form_data_token(self):
+        assert get_form_data_token({"token": "token_abcdefg1"}) == "token_abcdefg1"
+        generated_token = get_form_data_token({})
+        assert re.match(r"^token_[a-z0-9]{8}$", generated_token) is not None
