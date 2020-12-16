@@ -94,3 +94,5 @@ try:
     )
 except ImportError:
     logger.info("Using default Docker config...")
+
+ENABLE_SCHEDULED_EMAIL_REPORTS = True
