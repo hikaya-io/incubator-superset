@@ -1,0 +1,10 @@
+FROM apache/incubator-superset:latest-dev
+USER root
+RUN apt-get update
+RUN apt-get install libgtk-3-0 xvfb firefox-esr -y
+RUN wget https://github.com/mozilla/geckodriver/releases/download/v0.24.0/geckodriver-v0.24.0-linux64.tar.gz
+RUN tar -xvzf geckodriver-v0.24.0-linux64.tar.gz
+RUN cp geckodriver /usr/bin/geckodriver
+RUN chmod +x /usr/bin/geckodriver
+RUN Xvfb :10 -ac &
+ENV DISPLAY :10
