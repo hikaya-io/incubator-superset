@@ -868,7 +868,7 @@ WEBDRIVER_OPTION_ARGS = [
 ]
 
 # The base URL to query for accessing the user interface
-WEBDRIVER_BASEURL = "http://0.0.0.0:8080/"
+WEBDRIVER_BASEURL = "http://superset:8088/" # https://github.com/apache/incubator-superset/issues/9135#issuecomment-587574966
 # The base URL for the email report hyperlinks.
 WEBDRIVER_BASEURL_USER_FRIENDLY = WEBDRIVER_BASEURL
 # Time in seconds, selenium will wait for the page to load
