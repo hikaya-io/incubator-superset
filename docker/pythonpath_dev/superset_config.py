@@ -26,6 +26,7 @@ import logging
 import os
 
 from cachelib.file import FileSystemCache
+from celery.schedules import crontab
 
 logger = logging.getLogger()
 
@@ -72,11 +73,35 @@ RESULTS_BACKEND = FileSystemCache("/app/superset_home/sqllab")
 
 class CeleryConfig(object):
     BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_CELERY_DB}"
-    CELERY_IMPORTS = ("superset.sql_lab",)
     CELERY_RESULT_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_RESULTS_DB}"
-    CELERY_ANNOTATIONS = {"tasks.add": {"rate_limit": "10/s"}}
     CELERY_TASK_PROTOCOL = 1
-
+    CELERY_IMPORTS = (
+        'superset.sql_lab',
+        'superset.tasks',
+    )
+    CELERYD_LOG_LEVEL = 'DEBUG'
+    CELERYD_PREFETCH_MULTIPLIER = 10
+    CELERY_ACKS_LATE = True
+    CELERY_ANNOTATIONS = {
+        "tasks.add": {
+            "rate_limit": "10/s"
+        },
+        'sql_lab.get_sql_results': {
+            'rate_limit': '100/s',
+        },
+        'email_reports.send': {
+            'rate_limit': '1/s',
+            'time_limit': 120,
+            'soft_time_limit': 150,
+            'ignore_result': True,
+        },
+    }
+    CELERYBEAT_SCHEDULE = {
+        'email_reports.schedule_hourly': {
+            'task': 'email_reports.schedule_hourly',
+            'schedule': crontab(minute=1, hour='*'),
+        },
+    }
 
 CELERY_CONFIG = CeleryConfig
 SQLLAB_CTAS_NO_LIMIT = True
