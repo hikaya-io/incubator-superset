@@ -81,7 +81,10 @@ services:
     volumes: *superset-volumes
 
   superset-worker:
-    image: *superset-image
+    # image: *superset-image
+    build:
+      context: .
+      dockerfile: ./Dockerfile-gecko
     container_name: superset_worker
     command: ["/app/docker/docker-bootstrap.sh", "worker"]
     env_file: docker/.env
