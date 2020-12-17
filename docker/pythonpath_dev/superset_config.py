@@ -120,4 +120,32 @@ try:
 except ImportError:
     logger.info("Using default Docker config...")
 
+## Scheduled emailed reports
 ENABLE_SCHEDULED_EMAIL_REPORTS = True
+
+## SMTP configuration
+EMAIL_NOTIFICATIONS = True
+
+SMTP_HOST = "smtp.gmail.com"
+SMTP_STARTTLS = True
+SMTP_SSL = False
+SMTP_USER = "anastiour@gmail.com"
+SMTP_PORT = 25
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
+SMTP_MAIL_FROM = "anastiour@gmail.com"
+
+# ENABLE_SCHEDULED_EMAIL_REPORTS = True
+# EMAIL_NOTIFICATIONS = True
+EMAIL_REPORTS_CRON_RESOLUTION = 15
+EMAIL_PAGE_RENDER_WAIT = 30
+EMAIL_REPORTS_WEBDRIVER = "chrome" # firefox/chrome
+EMAIL_REPORTS_USER = "admin" #superset username
+# SMTP_HOST = "email-smtp.ap-south-1.amazonaws.com"
+# SMTP_STARTTLS = True
+# SMTP_USER = "[SMTP_USER]"
+SMTP_PORT = 25
+# SMTP_PASSWORD = "[PASSWORD]"
+# SMTP_MAIL_FROM = "no-reply@zolostays.com"
+
+# WEBDRIVER_BASEURL = "http://0.0.0.0:8088"
+# WEBDRIVER_BASEURL_USER_FRIENDLY = WEBDRIVER_BASEURL
