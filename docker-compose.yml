@@ -92,6 +92,11 @@ services:
     depends_on: *superset-depends-on
     user: "root"
     volumes: *superset-volumes
+    environment:
+      REDIS_CELERY_DB: 0
+      REDIS_RESULTS_DB: 1
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
 
   superset-tests-worker:
     image: *superset-image
