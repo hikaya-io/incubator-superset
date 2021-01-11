@@ -12,6 +12,31 @@ In order to add a new Country Map, we need to manually edit this package by addi
 
 4. Finally, rebuild the Superset frontend and restart Superset
 
+## Countries to add and their admin boundaries
+
+- Angola: ADM3
+- Bangladesh: ADM2
+- Burundi: ADM2
+- Cameroon: ADM3
+- Central African Republic: ADM3
+- Central America: ?
+- Chad: ADM2
+- Columbia-Venezuela: ADM2-ADM1
+- Democratic Republic of Congo: ADM3
+- Ethiopia: ADM3
+- Haiti: ADM3
+- Jerusalem
+- Jordan: ADM1
+- Iraq: ADM1
+- Kenya-Djibouti
+- LAO-PDR
+- Mauritania: ADM2
+- Mozambique: ADM3
+- Myanmar: ADM3
+- Nepal: ADM2
+- Somalia: ADM2
+- South Sudan: ADM2
+- Uganda: ADM2
 
 ## References
 
