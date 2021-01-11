@@ -12,3 +12,9 @@ In order to add a new Country Map, we need to manually edit this package by addi
 
 4. Finally, rebuild the Superset frontend and restart Superset
 
+
+## References
+
+- [Official Superset documentation on how to add a Country Map](https://superset.apache.org/docs/miscellaneous/country-map-tools/): please note that this documentation is outdated
+- [PR to improve Superset documentation on adding Country Maps](https://github.com/apache/incubator-superset/pull/10621/files): although this is an update, it is missing a crucial step (what step?????)
+- [Superset issue & discussion on adding a new Country Map](https://github.com/apache/incubator-superset/issues/8819)
