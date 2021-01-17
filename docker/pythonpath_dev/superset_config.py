@@ -149,3 +149,8 @@ SMTP_PORT = 25
 
 # WEBDRIVER_BASEURL = "http://0.0.0.0:8088"
 # WEBDRIVER_BASEURL_USER_FRIENDLY = WEBDRIVER_BASEURL
+
+# https://github.com/apache/superset/issues/12487#issuecomment-759390836
+FEATURE_FLAGS = {
+    "ENABLE_TEMPLATE_PROCESSING": True,
+}
